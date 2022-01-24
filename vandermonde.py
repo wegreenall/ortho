@@ -53,8 +53,8 @@ def solve_transpose(alpha, b):
 
     for getting the coefficients that interpolate from a given polynomial.
 
-    V(α_0, α_1, ..., α_n) = [1,     1,   ...,     1]
-                            [α_0, α_1,   ...,   α_n]
+    V(α_0, α_1, ..., α_n) = [1,       1,   ...,     1]
+                            [α_0,   α_1,   ...,   α_n]
                             [          ...         ]
                             [α^n_0, α_1, ..., α^n_n]
 
