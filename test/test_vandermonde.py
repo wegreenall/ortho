@@ -4,7 +4,7 @@ import math
 import unittest
 
 import matplotlib.pyplot as plt
-from vandermonde import solve, solve_transpose
+from ortho.vandermonde import solve, solve_transpose, Bjorck_Pereyra
 
 
 # def nchoosek(n, k):
@@ -35,13 +35,13 @@ class TestBjorckPereyra(unittest.TestCase):
     def setUp(self):
         # build the terms for the test
         n = 7
-        x = torch.zeros(n + 1)
+        correct = torch.zeros(n + 1)
         for i in range(n + 1):
-            x[i] = (
+            correct[i] = (
                 ((-1) ** i) * nchoosek(n + 1, i + 1) * ((1 + (i + 1) / 2) ** n)
             )
 
-        self.x = torch.Tensor(x)
+        self.correct = torch.Tensor(correct)
         self.a = torch.Tensor([1 / (i + 3) for i in range(n + 1)])
         self.b = torch.Tensor([1 / (2 ** i) for i in range(n + 1)])
         pass
@@ -54,12 +54,17 @@ class TestBjorckPereyra(unittest.TestCase):
 
     def test_vandermonde_transpose(self):
         eps = 0.0001
-        result = solve_transpose(self.a, self.b)
-        print("transpose_result:", result)
-        print("self.x is:", self.x)
-        print("error is:", torch.abs(self.x - result))
+        result = solve_transpose(
+            self.a, self.b
+        )  # the old version from the github...
+        result = Bjorck_Pereyra(
+            self.a, self.b
+        )  # i.e. the result of my function
+        print("my result:", result)
+        print("self.x is:", self.correct)
+        print("error is:", torch.abs(self.correct - result))
         breakpoint()
-        # self.assertTrue((torch.abs(self.x - result) < eps).all())
+        self.assertTrue((torch.abs(self.x - result) < eps).all())
         plt.plot(torch.abs(self.x - result))
         plt.show()
 
