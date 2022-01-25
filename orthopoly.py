@@ -64,7 +64,7 @@ class OrthogonalPolynomial:
 
         validates w.r.t the fact that the betas are positive.
         """
-        assert (betas > 0).all(), "Please make sure all betas are positive"
+        assert (betas >= 0).all(), "Please make sure all betas are positive"
         self.betas = betas
 
     def set_gammas(self, gammas):
@@ -135,16 +135,39 @@ def get_measure_from_poly(
     return betas
 
 
-def get_poly_from_moments(moments: list) -> OrthogonalPolynomial:
+class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
+    def __init__(self, order, gammas):
+        """
+        If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
+        then there exist coefficients γ_n != 0 for n>=1, s.t.
+                P_{n+1} = xP_n(x) - γ_nP_{n-1}
+
+        with initial conditions P_0(x) = 1 and P_1(x) = x
+        This is equivalent to a polynomial sequence with β_n = 0 for each n
+        """
+        betas = torch.zeros(order)
+        super().__init__(order, betas, gammas)
+
+
+def get_poly_from_moments(moments: list) -> SymmetricOrthogonalPolynomial:
     """
-    Accepts a list of moment values and produces from it an
-    OrthogonalPolynomial that
+    Accepts a list of moment values and produces from it a
+    SymmetricOrthogonalPolynomial.
+
+    The standard recurrence for an orthogonal polynomial series has n equations
+    and 2n unknowns - this means that it is not feasible to construct, from a
+    given sequence of moments, an orthogonal polynomial sequence that is
+    orthogonal     w.r.t the given moments. However, if we impose
+    symmetricality, we can build a sequence of symmetric orthogonal polynomials
+    from a given set of moments.
     """
     order = len(moments)
-    betas = torch.ones(order)
-    gammas = torch.ones(order)
+    gammas = torch.zeros(order)
 
-    return OrthogonalPolynomial(order, betas, gammas)
+    # to construct the polynomial from the sequnce of moments, utilise the
+    # sequence of equations:
+
+    return SymmetricOrthogonalPolynomial(order, gammas)
 
 
 if __name__ == "__main__":
@@ -153,8 +176,8 @@ if __name__ == "__main__":
     order = 4
     # betas = torch.ones(order)
     # gammas = torch.linspace(0, order, order)
-    betas = D.Exponential(1.0).sample([order])
-    gammas = D.Exponential(1.0).sample([order])
+    betas = D.Exponential(10.0).sample([order])
+    gammas = D.Exponential(10.0).sample([order])
     gammas[0] = 1
 
     poly = OrthogonalPolynomial(order, betas, gammas)
@@ -163,6 +186,11 @@ if __name__ == "__main__":
     params: Dict = dict()
     func = poly(x, 3, params)
     plt.plot(x, func)
+    plt.show()
+
+    sym_poly = SymmetricOrthogonalPolynomial(order, gammas)
+    sym_func = sym_poly(x, 2, params)
+    plt.plot(x, sym_func)
     plt.show()
 
     # checking the moments from the polynomial thing works

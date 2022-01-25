@@ -1,6 +1,24 @@
 import torch
 from ortho.orthopoly import OrthogonalPolynomial
 import torch.distributions as D
+from typing import Callable
+
+
+def get_measure_from_poly(poly: OrthogonalPolynomial) -> Callable:
+    # get the moments:
+    moments = get_moments_from_poly(poly)
+    """
+    The sequence of moments from the polynomial imply a unique linear moment
+    functional, but multiple corresponding densities. To that extent, we can
+    choose the one that maximises the Shannon informational entropy, subject
+    to the constraints implied by the moments -
+    see, "Inverse two-sided Laplace transform for probability density
+    functions", (Tagliani 1998)
+    """
+    # to build the density, we solve the following problem:
+    # min μ_0 ln(1/μ_0  \int exp(-Σλ_j t^j) dt ) + Σλ_j μ_j
+
+    return
 
 
 class coeffics_list:

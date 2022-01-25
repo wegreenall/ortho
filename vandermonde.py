@@ -1,95 +1,138 @@
 import torch
+from MercerGP.polynomials import chebyshev_first, chebyshev_second
+import matplotlib.pyplot as plt
 
 """
-Here we implement the Bjorck and Pereya algorithm, based in pytorch for 
+Here we implement the Bjorck and Pereya(1970) algorithm , based in pytorch for 
 differentiability.
 """
 
 
-def solve(alpha, b):
+def vander(x):
+    n = len(x)
+    vander = torch.zeros(n, n)
+    for i, val in enumerate(alpha):
+        vander[i, :] = torch.pow(val, torch.linspace(0, n - 1, n))
+    return vander
+
+
+def power_matrix(x, order):
     """
-    Returns the solution c to the system:
-        Vc = ψ
-
-    for getting the coefficients that interpolate from a given polynomial.
-
-    V(α_0, α_1, ..., α_n) = [1,     1,   ...,     1]
-                            [α_0, α_1,   ...,   α_n]
-                            [          ...         ]
-                            [α^n_0, α_1, ..., α^n_n]
-
-    From the paper (Bjorck and Pereyra, 1970):
-        Algorithm for the primal system:
-        Step (i). put d^(0) = b,
-            for k = 0, 1, ..., n-1,
-            compute:
-                d_j^{K+1} = d_i^{k} - α_k d_i-1^{k}  for j = n, n-1, ..., k+1
-                          = d_i^{k}                  for j = k, k-1, ...,   0
-        Step (ii). put x^{n} = d^{n},
-            for k= n-1, ..., 1, 0 compute
-            x_j^{(k+1/2)} = x_j^{K}                    j = 0, 1, ..., k
-            x_j^{(k+1/2)} = x_j^{K}/(a_i - a_{i-k-1})  j = k+1, ..., n-1, n
-            x_j(k) = x_j^{k+1/2}                       j = 0,1,...,k-1,n
-            x_j(k) = x_j^{k+1/2} - x_j+1               j = k,..., n-1
+    Returns a matrix of the powers of 'x' up to 'order' for the purpose
+    of building mgfs, vandermonde matrices, etc.
     """
-    assert len(alpha) == len(b)
-
-    n = len(b)
-    x = b.clone()
-
-    for k in range(1, n):
-        x[k:n] = x[k:n] - x[k - 1 : n - 1]  # for k to
-        x[k:n] /= alpha[k:n] - alpha[0 : n - k]
-
-    for k in range(n - 1, 0, -1):
-        x[k - 1 : n - 1] -= alpha[k - 1] * x[k:n]
-    return x
+    signs = torch.sign(x).repeat(order, 1).t()
+    log_x = torch.log(torch.abs(x))
+    powers = torch.linspace(0, order - 1, order)
+    result = torch.exp(torch.einsum("i,j->ij", log_x, powers))
+    return signs * result
 
 
-def solve_transpose(alpha, b):
+def nchoosek(n, k):
+    return torch.exp(
+        torch.lgamma(torch.tensor(n + 1))
+        - (
+            torch.lgamma(torch.tensor(k + 1))
+            + torch.lgamma(torch.tensor(n - k + 1))
+        )
+    )
+
+
+def Bjorck_Pereyra(alpha, f):
     """
-    Returns the solution c to the system:
+    Implements the Bjorck Pereyra algorithm "for the dual system"
+
         V'a = f
 
-    for getting the coefficients that interpolate from a given polynomial.
+    Where:
+        a = (a_0, a_1, ..., a_n)'  the set of coefficients we want to solve for
+        f = (f_0, f_1, ..., f_n)'  the polynomial function values we will use
+                                   to interpolate with
+       V' = |1,         1, ...,     1|  the Vandermonde matrix evaluated at
+            |α_0,     α_1, ...,   α_n|  (α_0, α_1, ... α_n)
+            |            ...         |
+            |α_0^n, α_1^n, ..., α_n^n|
 
-    V(α_0, α_1, ..., α_n) = [1,       1,   ...,     1]
-                            [α_0,   α_1,   ...,   α_n]
-                            [          ...         ]
-                            [α^n_0, α_1, ..., α^n_n]
+    The algorithm builds up the coefficients by replacing, in each iteration,
+    the vector of values with another one that is different by one term.
 
-    From the paper (Bjorck and Pereyra, 1970):
-        Algorithm for the primal system:
-        Step (i). put d^(0) = b,
-            for k = 0, 1, ..., n-1,
-            compute:
-                d_j^{K+1} = d_i^{k} - α_k d_i-1^{k}  for j = n, n-1, ..., k+1
-                          = d_i^{k}                  for j = k, k-1, ...,   0
-        Step (ii). put x^{n} = d^{n},
-            for k= n-1, ..., 1, 0 compute
-            x_j^{(k+1/2)} = x_j^{K}                    j = 0, 1, ..., k
-            x_j^{(k+1/2)} = x_j^{K}/(a_i - a_{i-k-1})  j = k+1, ..., n-1, n
-            x_j(k) = x_j^{k+1/2}                       j = 0,1,...,k-1,n
-            x_j(k) = x_j^{k+1/2} - x_j+1               j = k,..., n-1
+    First, it builds from c(0) = f -> c(n) = {a vector of divided differences}
+
+    Then it builds from a(n) = c -> a(0) = {the solution}
+
+    each a(0) (or c(0)) is a full, n-sized vector.
     """
-    n = len(b)
-    x = b.clone()
+    # step 1: set c(0) = f
+    n = len(alpha)
+    c = f.clone()  # "for k:=0 step 1 until n do a[k] := f[k]"
+    for k in range(1, n):
+        """
+        From the Bjorck Pereyra paper:
+        Step(i):
+            Put c(0) = f, and, for k = 0,1,...,n-1, compute
+            c_j^(k+1) = (c_j^(k) - c_{j-1}^(k))/(α_j-α_{j-k-1} j = k+1, ..., n
+            c_j^(k+1) = c_i^(k)  , j = 0, 1, ... k  # i.e. leave it unchanged
+        """
+        c[k:n] = (c[k:n] - c[k - 1 : n - 1]) / (alpha[k:n] - alpha[0 : n - k])
 
-    for k in range(n):
-        x[k + 1 : n] -= alpha[k] * x[k : n - 1]
+    # step 2: set a(n) = c
+    A = c.clone()
+    for k in range(n - 1, 0, -1):  # i..e k decreasing from n-1 to 0
+        """
+        From the Bjorck Pereyra paper:
+        Step(ii):
+            Put a^(n) = c and, for k=n-1,...,1,0 compute
+            a_j^(k) = a_j^(k+1), j=0, 1, ... ,k-1 , n  (remember, in the first
+                                                        instance, k = n-1)
+            a_j^(k) = a_j(k+1) - α_κa^{k+1}_{j+1}
+        """
+        # a(k) is the same as a(k+1) for all j up to n-1
+        A[k - 1 : n - 1] = A[k - 1 : n - 1] - alpha[k - 1] * A[k:n]
 
-    for k in range(n - 1, 0, -1):
-        x[k:n] /= alpha[k:n] - alpha[: n - k]
-        x[k - 1 : n - 1] = x[k - 1 : n - 1] - x[k:n]
-    return x
+    """
+    From the Bjorck Pereyra paper:
+        Now define the lower bidiagonal matrix L_k(α) of order n+1 by:
+    """
+    return A  # this should be the sequence of coefficients
 
 
 if __name__ == "__main__":
-    n = 10
-    a = torch.Tensor([(1 / (i + 3)) for i in range(n)])
-    b = torch.Tensor([(1 / (2 ** i)) for i in range(n)])
+    n = 4
+    lb = -7
+    ub = 7
+    alpha = torch.linspace(lb, ub, n)
+    a = torch.ones(n)  # the coefficients are all 1
+    a = torch.distributions.Exponential(1 / 10).sample([n])
 
-    result = solve(a, b)
-    result_2 = solve_transpose(a, b)
-    # print(result)
-    # print(result_2)
+    # true_function
+    z = torch.linspace(-7, 7, 100)
+    true_function = torch.zeros(100)
+    function_points = torch.zeros(n)
+    for i in range(n):
+        true_function += a[i] * z ** i
+        function_points += a[i] * alpha ** i  # i.e. just the function points
+    plt.plot(z, true_function)
+    plt.scatter(alpha, function_points)
+
+    # dual algorithm points
+    result = Bjorck_Pereyra(alpha, function_points)  # can we get all ones?
+    # result_2 = solve(alpha, function_points)
+
+    # now build that polynomial!
+    test_polynomial = torch.zeros(len(z))
+    for i in range(n):
+        test_polynomial += result[i] * z ** i
+
+    plt.plot(z, test_polynomial)
+    plt.show()
+
+    # what about vandermonde...
+    vander = torch.zeros(n, n)
+    for i, val in enumerate(alpha):
+        vander[i, :] = torch.pow(val, torch.linspace(0, n - 1, n))
+
+    vanderinv = torch.linalg.inv(vander)
+    solved_a = torch.einsum("ij,j->i", vanderinv, function_points)
+    print("the true coefficients", a)
+    print("WIth vandermonde inverse:", solved_a)
+    print("The result from my implementation:", result)
