@@ -238,7 +238,7 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
     )
 
     if chebyshev == "first":
-        chebyshev_term = chebyshev_first(x, deg)
+        chebyshev_term = chebyshev_first(z, deg)
         # exponent of weight function (1-z**2)
         weight_power = torch.tensor(-0.25)
 
@@ -249,7 +249,7 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
             normalising_constant = 2 / math.sqrt(math.pi)
 
     elif chebyshev == "second":
-        chebyshev_term = chebyshev_second(x, deg)
+        chebyshev_term = chebyshev_second(z, deg)
 
         # exponent of weight function (1-z**2)
         weight_power = torch.tensor(0.25)

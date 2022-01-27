@@ -4,6 +4,8 @@ from ortho.polynomials import (
     LaguerrePolynomial,
     HermitePolynomial,
     ProbabilistsHermitePolynomial,
+    chebyshev_first,
+    chebyshev_second,
 )
 
 
