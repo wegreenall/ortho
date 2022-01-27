@@ -2,11 +2,6 @@ import torch
 from typing import Dict
 import matplotlib.pyplot as plt
 
-
-# from ortho.measure import L, coeffics_list
-
-# from framework.basis_functions import Basis
-
 """
 contains classes for construction of orthogonal polynomials. will also contain
 implementations of the classical orthogonal polynomials, as well as methods
@@ -15,7 +10,7 @@ for getting the measure/weight function
 
 
 class OrthogonalPolynomial:
-    def __init__(self, order, betas, gammas):
+    def __init__(self, order, betas, gammas, leading=1):
         """
         A system of orthogonal polynomials has the property that:
 
@@ -40,17 +35,21 @@ class OrthogonalPolynomial:
             )
         self.set_betas(betas)
         self.set_gammas(gammas)
+        self.leading = leading
 
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         """ """
+        if deg > self.order:
+            raise ValueError("The order of this polynomial is not high enough")
+
         if deg == 0:
-            return 1
+            return torch.ones(x.shape)
         elif deg == 1:
-            return x - self.betas[0]
+            return self.leading * (x - self.betas[deg - 1])
         else:
-            return (x - self.betas[deg]) * self(
+            return (self.leading * x - self.betas[deg - 1]) * self(
                 x, deg - 1, params
-            ) - self.gammas[deg] * self(x, deg - 2, params)
+            ) - self.gammas[deg - 1] * self(x, deg - 2, params)
         pass
 
     def get_order(self):
@@ -74,7 +73,7 @@ class OrthogonalPolynomial:
 
         validates w.r.t the fact that γ_0 is positive.
         """
-        assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        # assert gammas[0] == 1, "Please make sure gammas[0] = 1"
         self.gammas = gammas
 
     def get_betas(self):
