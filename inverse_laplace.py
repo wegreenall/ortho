@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import math
 from ortho.vandermonde import Bjorck_Pereyra
 from typing import Callable
-from MercerGP.basis_functions import Basis
-from MercerGP.polynomials import generalised_laguerre
+from ortho.basis_functions import Basis
+from ortho.polynomials import generalised_laguerre
 
 """
 Implements the inverse Laplace transform algorithm as explained in:

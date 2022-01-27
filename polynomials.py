@@ -38,9 +38,13 @@ class LaguerrePolynomial(GeneralizedLaguerrePolynomial):
 
 if __name__ == "__main__":
     # Hermite polynomials
-    order = 50
+    order = 12
     x = torch.linspace(-2, 2, 1000)
     hermite = HermitePolynomial(order)
     params = dict()
     plt.plot(x, hermite(x, 4, params))
+    plt.show()
+
+    for i in range(order):
+        plt.plot(x, hermite(x, i, params) ** 2)
     plt.show()

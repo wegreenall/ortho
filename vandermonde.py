@@ -1,5 +1,5 @@
 import torch
-from MercerGP.polynomials import chebyshev_first, chebyshev_second
+from ortho.polynomials import chebyshev_first, chebyshev_second
 import matplotlib.pyplot as plt
 
 """
