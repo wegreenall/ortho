@@ -1,5 +1,6 @@
 import torch
 from ortho.orthopoly import OrthogonalPolynomial
+from ortho.inverse_laplace import build_inverse_laplace_from_moments
 import torch.distributions as D
 from typing import Callable
 
@@ -17,8 +18,10 @@ def get_measure_from_poly(poly: OrthogonalPolynomial) -> Callable:
     """
     # to build the density, we solve the following problem:
     # min μ_0 ln(1/μ_0  \int exp(-Σλ_j t^j) dt ) + Σλ_j μ_j
-
-    return
+    sigma = 2
+    b = 1
+    measure = build_inverse_laplace_from_moments(moments, sigma, b)
+    return measure
 
 
 class coeffics_list:
@@ -156,4 +159,4 @@ if __name__ == "__main__":
 
     poly = OrthogonalPolynomial(order, betas, gammas)
     mus = get_moments_from_poly(poly)
-    print(mus)
+    print("moments from a random polynomial linear moment functional:", mus)

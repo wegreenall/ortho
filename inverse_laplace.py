@@ -1,7 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 import math
-from vandermonde import Bjorck_Pereyra
+from ortho.vandermonde import Bjorck_Pereyra
 from typing import Callable
 from MercerGP.basis_functions import Basis
 from MercerGP.polynomials import generalised_laguerre
@@ -59,105 +59,76 @@ def mobius_transform(sigma, b, w):
 
 
 def build_inverse_laplace(
+    func: Callable, b: torch.Tensor, sigma: torch.Tensor, order, gamma=1
+):
+    """
+    It works! But it is slow.
+    """
+    # step 1: evaluate the MGF at the Chebyshev nodes, and push through
+    # the bilateral transform:
+    w = chebyshev_roots(order)
+    phi_w = ((2 * b / (1 - w)) ** gamma) * func(mobius_transform(sigma, b, w))
+
+    # step 2: calculate the coefficients of the polynomial that interpolates
+    # phi_w at w:
+    interpolating_coeffics = Bjorck_Pereyra(w, phi_w)
+    params = {"alpha": torch.tensor(0.0)}
+    laguerre_basis = Basis(generalised_laguerre, 1, order, params)
+
+    # When evaluating the laguerre basis, we get a matrix that is of size:
+    # [N, m]
+    # Assuming this is correct, we need:
+    # 'm,nm -> exp(-bx)L(2bx), interpolating_coeffics'
+    return lambda x: torch.exp((sigma - b) * x) * torch.einsum(
+        "nm, m -> n",
+        laguerre_basis(2 * b * x),
+        interpolating_coeffics,
+    )
+
+
+def build_inverse_laplace_from_moments(
     moments: torch.Tensor, sigma: torch.Tensor, b: torch.Tensor, gamma=1
 ) -> Callable:
     """
     Constructs the inverse laplace transform of the MGF for the linear moment
     functional that corresponds to the set of moments passed in as 'moments'.
     """
-    # step 1: evaluate the MGF at the Chebyshev nodes:
     order = len(moments)
-    w = chebyshev_roots(order)
-    phi_w = ((2 * b / (1 - w)) ** gamma) * mgf(
-        mobius_transform(sigma, b, w), moments
+    result = build_inverse_laplace(
+        lambda x: mgf(x, moments), sigma, b, order, gamma
     )
-
-    # step 2: calculate the coefficients of the polynomial that interpolates
-    # phi_w at w:
-    interpolating_coeffics = Bjorck_Pereyra(w, phi_w)
-    params = {"alpha": torch.tensor(0.0)}
-    laguerre_basis = Basis(generalised_laguerre, 1, order, params)
-
-    # When evaluating the laguerre basis, we get a matrix that is of size:
-    # [N, m]
-    # Assuming this is correct, we need:
-    # 'm,nm -> exp(-bx)L(2bx), interpolating_coeffics'
-    print("about to sum to get summable!")
-    # breakpoint()
-    summable = laguerre_basis(2 * b * x)
-    print("Just produced summable!")
-    # breakpoint()
-    return lambda x: torch.exp((sigma - b) * x) * torch.einsum(
-        "nm, m -> n",
-        summable,
-        interpolating_coeffics,
-    )
-
-
-def build_two_sided_inverse_laplace(
-    moments: torch.Tensor, sigma: torch.Tensor, b: torch.Tensor
-) -> Callable:
-    """
-    Constructs the two-sided inverse laplace transform of the MGF for the
-    linear moment functional that corresponds to the set of moments passed
-    in as 'moments'.
-    """
-    # step 1: evaluate the MGF at the Chebyshev nodes:
-    order = len(moments)
-    w = chebyshev_roots(order)
-    phi_w = mgf(w, moments)
-
-    # step 2: calculate the coefficients of the polynomial that interpolates
-    # phi_w at w:
-    interpolating_coeffics = Bjorck_Pereyra(w, phi_w)
-    params = {"alpha": torch.tensor(0.0)}
-    laguerre_basis = Basis(generalised_laguerre, 1, order, params)
-
-    # When evaluating the laguerre basis, we get a matrix that is of size:
-    # [N, m]
-    # Assuming this is correct, we need:
-    # 'm,nm -> exp(-bx)L(2bx), interpolating_coeffics'
-    print("about to sum to get summable!")
-    # breakpoint()
-    summable = laguerre_basis(2 * b * x)
-    print("Just produced summable!")
-    # breakpoint()
-    return lambda x: torch.exp((sigma - b) * x) * torch.einsum(
-        "nm, m -> n",
-        summable,
-        interpolating_coeffics,
-    )
+    return result
 
 
 if __name__ == "__main__":
     N = 20
     roots = chebyshev_roots(N)
-    # print(roots)
-    moments = torch.Tensor(
-        [
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-        ]
-    )
     moments = torch.ones(N)
-    x = torch.linspace(0, 1, 100)
+    x = torch.linspace(0, 5, 100)
     mgf_values = mgf(x, moments)
     plt.plot(mgf_values)
     plt.plot(torch.exp(x))
     plt.show()
-    breakpoint()
 
-    plt.scatter(roots, torch.zeros(roots.shape))
-    plt.show()
+    s = 1  # "sigma" for laplace
+    b = 1  # "b" for laplace
+    # plt.scatter(roots, torch.zeros(roots.shape))
+    # plt.show()
 
-    inverse_laplace_function = build_inverse_laplace(
+    inverse_laplace_function = build_inverse_laplace_from_moments(
         moments, torch.Tensor([1]), torch.Tensor([1])
     )
+    inverse_laplace_function_2 = build_inverse_laplace(
+        lambda x: mgf(x, moments), b, s, N
+    )
 
-    plt.plot(x, inverse_laplace_function(x))
+    # Example: sin: sin(ωt) * u(t)
+    mu = 1
+    sigma = 1
+    t = 2
+    F = lambda x: t / (x ** 2 + t ** 2)
+    my_sin = build_inverse_laplace(F, b, s, N)
+    density_vals = my_sin(x)
+    plt.plot(x, torch.sin(t * x).numpy())
+    plt.plot(x, density_vals.numpy(), color="red")
     plt.show()

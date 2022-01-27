@@ -4,7 +4,7 @@ import math
 import unittest
 
 import matplotlib.pyplot as plt
-from ortho.vandermonde import solve, solve_transpose, Bjorck_Pereyra
+from ortho.vandermonde import Bjorck_Pereyra
 
 
 # def nchoosek(n, k):
@@ -34,39 +34,26 @@ Tests for the case as described in Bjorck and Pereyra:
 class TestBjorckPereyra(unittest.TestCase):
     def setUp(self):
         # build the terms for the test
-        n = 7
-        correct = torch.zeros(n + 1)
-        for i in range(n + 1):
-            correct[i] = (
-                ((-1) ** i) * nchoosek(n + 1, i + 1) * ((1 + (i + 1) / 2) ** n)
-            )
+        n = 10
+        lb = -7
+        ub = 7
+        self.alpha = torch.linspace(
+            lb, ub, n
+        )  # points at which we observe the fn
+        self.a = torch.distributions.Exponential(1 / 10).sample([n])
+        function_points = torch.zeros(n)
+        # alpha are observation locations
+        # a are the true (random!) coefficients
+        for i in range(n):
+            function_points += self.a[i] * self.alpha ** i  # alpha are
+        self.function_points = function_points
 
-        self.correct = torch.Tensor(correct)
-        self.a = torch.Tensor([1 / (i + 3) for i in range(n + 1)])
-        self.b = torch.Tensor([1 / (2 ** i) for i in range(n + 1)])
         pass
 
     def test_vandermonde(self):
         eps = 0.0001
-        result = solve(self.a, self.b)
-        # print("result:", result)
-        self.assertTrue((torch.abs(self.x - result) < eps).all())
-
-    def test_vandermonde_transpose(self):
-        eps = 0.0001
-        result = solve_transpose(
-            self.a, self.b
-        )  # the old version from the github...
-        result = Bjorck_Pereyra(
-            self.a, self.b
-        )  # i.e. the result of my function
-        print("my result:", result)
-        print("self.x is:", self.correct)
-        print("error is:", torch.abs(self.correct - result))
-        breakpoint()
-        self.assertTrue((torch.abs(self.x - result) < eps).all())
-        plt.plot(torch.abs(self.x - result))
-        plt.show()
+        result = Bjorck_Pereyra(self.alpha, self.function_points)
+        self.assertTrue((torch.abs(self.a - result) < eps).all())
 
 
 if __name__ == "__main__":

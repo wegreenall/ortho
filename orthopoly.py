@@ -29,7 +29,8 @@ class OrthogonalPolynomial:
             P_0(x) = 1 and P_1(x) = x
 
         Construction then of an arbitrary orthogonal polynomial sequence should
-        involve setting the betas and the gammas
+        involve setting the betas and the gammas appropriate for a given
+        application
         """
         self.order = order
 
@@ -128,11 +129,7 @@ def get_measure_from_poly(
         Σ_ι  μ_i x^i / i!
 
     """
-    # mu_0 = initial_moment
-    # betas = poly.get_betas()
-    # gammas = poly.get_gammas()
-
-    return betas
+    raise NotImplementedError
 
 
 class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):

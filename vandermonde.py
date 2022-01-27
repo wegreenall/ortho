@@ -116,7 +116,6 @@ if __name__ == "__main__":
 
     # dual algorithm points
     result = Bjorck_Pereyra(alpha, function_points)  # can we get all ones?
-    # result_2 = solve(alpha, function_points)
 
     # now build that polynomial!
     test_polynomial = torch.zeros(len(z))
