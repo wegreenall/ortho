@@ -105,7 +105,8 @@ class Basis:
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
     """
-    Returns the hermite function evaluated at the input point x.
+    The smooth exponential basis functions as constructed in Fasshauer (2012),
+    "second" paramaterisation.
 
     The Hermite function here is that constructed with the Physicist's Hermite
     Polynomial as opposed to the Probabilist's.
@@ -116,13 +117,20 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
     : param params: dict of parameters. keys set on case-by-case basis
     """
     # breakpoint()
+    if deg > 42:
+        print(
+            r"Warning: the degree of the hermite polynomial is relatively"
+            + "high - this may cause problems with the hermvals function."
+            + "Try lowering the order, or use a different basis function."
+        )
+
     epsilon = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     alpha = torch.diag(params["precision_parameter"])  # precision parameter
     # of the measure w.r.t the hermite functions are orthogonal
 
     sigma = torch.sqrt(params["variance_parameter"])
 
-    # = (1 + (2ε/α)^2 ) ^(1/4)
+    # β = (1 + (2ε/α)^2)^(1/4)
     beta = torch.pow((1 + torch.pow((2 * epsilon / alpha), 2)), 0.25)
 
     log_gamma = 0.5 * (
@@ -190,6 +198,91 @@ def smooth_exponential_eigenvalues(deg: int, params: dict):
         eigenvalue = torch.prod(lamda_d, dim=1)
         eigenvalues[i - 1] = eigenvalue
     # breakpoint()
+    return eigenvalues
+
+
+def smooth_exponential_basis_fasshauer(
+    x: torch.Tensor, deg: int, params: dict
+):
+    """
+    The smooth exponential basis functions as constructed in Fasshauer (2012),
+    "first" paramaterisation:
+        a, b, c.
+
+    The Hermite function here is that constructed with the Physicist's Hermite
+    Polynomial as opposed to the Probabilist's.
+
+    : param x: the input points to evaluate the function at. Should be of
+               dimensions [n,d]
+    : param deg: degree of polynomial used in construction of func
+    : param params: dict of parameters. keys set on case-by-case basis
+    """
+    # breakpoint()
+    if deg > 42:
+        print(
+            r"Warning: the degree of the hermite polynomial is relatively"
+            + "high - this may cause problems with the hermvals function."
+            + "Try lowering the order, or use a different basis function."
+        )
+
+    b = torch.sqrt(torch.diag(params["ard_parameter"]))  # ε  - of dimension d
+    a = torch.diag(params["precision_parameter"])  # precision parameter
+    # of the measure w.r.t the hermite functions are orthogonal
+    c = torch.sqrt(a ** 2 + 2 * a * b)
+    # sigma = torch.sqrt(params["variance_parameter"])
+
+    # β = (1 + (2ε/α)^2)^(1/4)
+    log_const_term = -(
+        deg * 2 + torch.lgamma(torch.tensor(deg) + 1) + 0.5 * (a / c)
+    )
+
+    # log_gamma = 0.5 * (
+    # torch.log(b)
+    # - (deg) * torch.log(torch.tensor(2, dtype=torch.float))
+    # - torch.lgamma(torch.tensor(deg + 1, dtype=torch.float))
+    # )
+
+    # calculate the Hermite polynomial term
+    # remember, deg = n-1
+    hermite_term = special.hermite_function(
+        torch.sqrt(2 * c) * x,
+        deg,
+        include_constant=False,
+        include_gaussian=False,
+    )
+
+    abs_hermite_term = torch.log(
+        torch.abs(hermite_term)
+    )  # maybe this improves conditioning??
+    mask = torch.where(
+        hermite_term < 0,
+        -torch.ones(hermite_term.shape),
+        torch.ones(hermite_term.shape),
+    )
+    phi_d = mask * torch.exp(
+        abs_hermite_term
+        + log_const_term
+        - ((c - a) * torch.pow(x, torch.tensor(2)))
+    )
+    return phi_d
+
+
+def smooth_exponential_eigenvalues_fasshauer(deg: int, params: dict):
+    """
+    Returns the vector of eigenvalues, up to length deg, using the parameters
+    provided in params.
+    :param deg: the degree up to which the eigenvalues should be computed.
+    :param params: a dictionary of parameters whose keys included
+    """
+    b = torch.sqrt(torch.diag(params["ard_parameter"]))  # ε  - of dimension d
+    alpha = torch.diag(params["precision_parameter"])  # precision
+    c = torch.sqrt(alpha ** 2 + 2 * alpha * b)
+    left_term = torch.sqrt(2 * alpha / (alpha + b + c))
+    right_term = b / (alpha + b + c)
+
+    # construct the vector
+    exponents = torch.linspace(0, deg - 1, deg)
+    eigenvalues = left_term * torch.pow(right_term, exponents)
     return eigenvalues
 
 
@@ -263,8 +356,8 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
     weight_term = torch.pow(1 - z ** 2, weight_power)
     if (chebyshev_term != chebyshev_term).any():
         raise ValueError(
-            "Chebyshev returning NaNs. Ensure \
-it is being evaluated within boundaries."
+            "Chebyshev returning NaNs. Ensure"
+            + "it is being evaluated within boundaries."
         )
 
     return weight_term * chebyshev_term * normalising_constant
