@@ -9,7 +9,8 @@ import torch
 # from framework import special, utils
 from polynomials import chebyshev_first, chebyshev_second
 from typing import Callable
-import special
+
+from ortho.special import hermite_function
 
 """
 This contains implementations of basis functions useful for constructing
@@ -147,7 +148,7 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
 
     # calculate the Hermite polynomial term
     # remember, deg = n-1
-    hermite_term = special.hermite_function(
+    hermite_term = hermite_function(
         alpha * beta * x, deg, include_constant=False, include_gaussian=False
     )
 
@@ -225,44 +226,28 @@ def smooth_exponential_basis_fasshauer(
             + "Try lowering the order, or use a different basis function."
         )
 
-    b = torch.sqrt(torch.diag(params["ard_parameter"]))  # ε  - of dimension d
     a = torch.diag(params["precision_parameter"])  # precision parameter
+    b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     # of the measure w.r.t the hermite functions are orthogonal
     c = torch.sqrt(a ** 2 + 2 * a * b)
     # sigma = torch.sqrt(params["variance_parameter"])
 
     # β = (1 + (2ε/α)^2)^(1/4)
-    log_const_term = -(
-        deg * 2 + torch.lgamma(torch.tensor(deg) + 1) + 0.5 * (a / c)
+    log_const_term = -0.5 * (
+        deg * torch.log(torch.tensor(2))
+        + torch.lgamma(torch.tensor(deg) + 1)
+        + 0.5 * (torch.log(a) - torch.log(c))
     )
-
-    # log_gamma = 0.5 * (
-    # torch.log(b)
-    # - (deg) * torch.log(torch.tensor(2, dtype=torch.float))
-    # - torch.lgamma(torch.tensor(deg + 1, dtype=torch.float))
-    # )
 
     # calculate the Hermite polynomial term
-    # remember, deg = n-1
-    hermite_term = special.hermite_function(
+    hermite_term = hermite_function(
         torch.sqrt(2 * c) * x,
         deg,
-        include_constant=False,
-        include_gaussian=False,
     )
 
-    abs_hermite_term = torch.log(
-        torch.abs(hermite_term)
-    )  # maybe this improves conditioning??
-    mask = torch.where(
-        hermite_term < 0,
-        -torch.ones(hermite_term.shape),
-        torch.ones(hermite_term.shape),
-    )
-    phi_d = mask * torch.exp(
-        abs_hermite_term
-        + log_const_term
-        - ((c - a) * torch.pow(x, torch.tensor(2)))
+    phi_d = (
+        torch.exp(log_const_term - ((c - a) * torch.pow(x, torch.tensor(2))))
+        * hermite_term
     )
     return phi_d
 
@@ -274,11 +259,11 @@ def smooth_exponential_eigenvalues_fasshauer(deg: int, params: dict):
     :param deg: the degree up to which the eigenvalues should be computed.
     :param params: a dictionary of parameters whose keys included
     """
-    b = torch.sqrt(torch.diag(params["ard_parameter"]))  # ε  - of dimension d
-    alpha = torch.diag(params["precision_parameter"])  # precision
-    c = torch.sqrt(alpha ** 2 + 2 * alpha * b)
-    left_term = torch.sqrt(2 * alpha / (alpha + b + c))
-    right_term = b / (alpha + b + c)
+    b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
+    a = torch.diag(params["precision_parameter"])  # precision
+    c = torch.sqrt(a ** 2 + 2 * a * b)
+    left_term = torch.sqrt(2 * a / (a + b + c))
+    right_term = b / (a + b + c)
 
     # construct the vector
     exponents = torch.linspace(0, deg - 1, deg)

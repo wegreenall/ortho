@@ -139,6 +139,7 @@ def hermval(x, c, prob=True):
                  if False, returns the Physicist's.
     :return:
     """
+    # print("ABOUT TO HERMVAL!")
     x2 = x * 2  # for the physicist's version
     # c0 = c[-1] - c1*(2*(nd-1))
 
@@ -165,7 +166,11 @@ def hermval(x, c, prob=True):
 
             # c1 = torch.where(c1!=c1, torch.zeros(c1.shape), c1)
             if (tmp != tmp).any() or (c0 != c0).any() or (c1 != c1).any():
+                print("tmp:", tmp)
+                print("c0:", c0)
+                print("c1:", c1)
                 print("The hermval contains NaNs.")
+
                 # c1 = torch.where(c1!=c1, torch.zeros(c1.shape), c1)
                 breakpoint()
     if prob:
@@ -182,7 +187,7 @@ def hermval(x, c, prob=True):
     return return_val
 
 
-def hermite_function(x, n, include_constant=True, include_gaussian=True):
+def hermite_function(x, n):
     """
     Returns the value of the Hermitian function
     (i.e. the Gauss-Hermitian function constructed from the Hermitian
@@ -197,63 +202,17 @@ def hermite_function(x, n, include_constant=True, include_gaussian=True):
 
     # might want to do all the following in logs for numerical stability
 
-    n_val = torch.Tensor([n])
-    if include_constant:
-        # constant_component = 1/(math.sqrt((2**n) *\
-        # torch.exp(torch.lgamma(n)) * math.sqrt(math.pi)))
-
-        constant_component_log = (
-            -(n_val)
-            / 2
-            * torch.log(
-                torch.tensor(
-                    2.0,
-                )
-            )
-            - 0.5 * torch.lgamma(n_val + 1)
-            - 0.25
-            * torch.log(
-                torch.tensor(
-                    math.pi,
-                )
-            )
-        )
-        if (constant_component_log != constant_component_log).any():
-            print("constant_component_log has nans!")
-            breakpoint()
-        constant_component = torch.exp(constant_component_log)
-        if (constant_component != constant_component).any():
-            print("constant_component has Nans")
-            breakpoint()
-    else:
-        constant_component = 1
-
-    if include_gaussian:
-        # gaussian_component_log = -0.5*np.power(x,2)
-        gaussian_component = np.exp(-np.power(x, 2) / 2)
-        if (gaussian_component != gaussian_component).any():
-            print("gaussian component has nans!")
-            breakpoint()
-    else:
-        gaussian_component = 1
-
     # build the coefficient vector needed to get the right hermite polynomial
     # value based on the way hermval gets it
-    zeros_vector = np.zeros([n])
-    coeffic_vector = np.concatenate([zeros_vector, np.array([1])])
-    hermite_component = hermval(x, coeffic_vector, prob=False)
+    coeffic_vector = torch.zeros([n + 1])
+    coeffic_vector[n] = 1
+    # print("About to get the hermvals!")
+    hermite_result = hermval(x, coeffic_vector, prob=False)
     # hermite_component = wg_hermval(x, n, prob=False)
-    if (hermite_component != hermite_component).any():
+    if (hermite_result != hermite_result).any():
         print("hermite component has nans!")
         breakpoint()
 
-    # hermite_result = torch.exp(constant_component_log
-    # + gaussian_component_log) * hermite_component
-    hermite_result = (
-        constant_component * gaussian_component * hermite_component
-    )
-
-    # breakpoint()
     return hermite_result
 
 
@@ -279,7 +238,7 @@ if __name__ == "__main__":
     coeffic_vector = np.concatenate([zeros_vector, np.array([1])])
     # y0 = hermite_function(z, 0)
     # y1 = hermite_function(z, 1)
-    y2 = hermite_function(z, 2, include_constant=False)
+    y2 = hermite_function(z, 2)
 
     def y2prime(x):
         return (4 * (x ** 2) - 2) * torch.exp(-0.5 * (x ** 2))
@@ -287,7 +246,7 @@ if __name__ == "__main__":
     def y3prime(x):
         return (8 * (x ** 3) - 12 * x) * torch.exp(-0.5 * (x ** 2))
 
-    y3 = hermite_function(z, 3, include_constant=False)
+    y3 = hermite_function(z, 3)
     # y3prime = lambda x:     # y3 = hermite_function(z, 3)
     # y4 = hermite_function(z, 4)
     # y5 = hermite_function(z, 5)
