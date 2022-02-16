@@ -100,39 +100,11 @@ def hermite_coefficients(N, whole_matrix=False):
     return return_val
 
 
-"""
-def wg_hermval(x, n, prob=True, log=False):
-    # get the coefficients
-    coefficients = hermite_coefficients(n)  # a vector of length n, i.e.
-                   the order of the polynomial
-    # signsx = torch.where(x<0, -1*torch.ones(x.shape), torch.ones(x.shape))
-    logx = torch.log(torch.abs(x))
-    polynomial_terms = torch.Tensor(list(range(n+1))).unsqueeze(1)
-    polynoms = polynomial_terms * logx
-
-    # logarithmify and get signs of coefficients
-
-    coefficsigns = torch.where(coefficients<0,
-                               -1*torch.ones(coefficients.shape),
-                               torch.ones(coefficients.shape))
-    polynoms += torch.log(torch.abs(coefficients).unsqueeze(1))
-    exponential_polynoms = torch.exp(polynoms)
-    summable_polynoms = coefficsigns * exponential_polynoms.T
-    # breakpoint()
-    hermvals = torch.sum(summable_polynoms, 1)
-    # if  not log:
-    return hermvals
-    # else:
-    #     return hermvals, coefficsigns
-    """
-
-
 def hermval(x, c, prob=True):
     """
     This replicates the numpy hermval function for Hermite polynomials but for
     Pytorch tensors.
 
-    truth be told, this doesn't even use any tensor stuff. nevermind.
     :param x:
     :param c:
     :param prob: if True, returns the probabilist's Hermite polynomial;
@@ -142,7 +114,10 @@ def hermval(x, c, prob=True):
     # print("ABOUT TO HERMVAL!")
     x2 = x * 2  # for the physicist's version
     # c0 = c[-1] - c1*(2*(nd-1))
-
+    if (x2 != x2).any():
+        print("Input to hermval contains NaN.")
+        breakpoint()
+    assert (x2 == x2).all(), "Input to hermval contains NaN."
     # else:
     if len(c) == 1:
         c0 = c[0]
@@ -169,7 +144,7 @@ def hermval(x, c, prob=True):
                 print("tmp:", tmp)
                 print("c0:", c0)
                 print("c1:", c1)
-                print("The hermval contains NaNs.")
+                print("One of the hermval components has become NaN.")
 
                 # c1 = torch.where(c1!=c1, torch.zeros(c1.shape), c1)
                 breakpoint()
@@ -194,9 +169,7 @@ def hermite_function(x, n):
     polynomials).
 
     The Hermite polynomials used here are the physicist's polynomials
-    if include_constant = False, and include_gaussian=False,
-    then the function returns the hermite polynomial of degree
-    n evaluated at x. This is useful for the construction of basis functions.
+    evaluated at x. This is useful for the construction of basis functions.
     :return:
     """
 
@@ -206,9 +179,7 @@ def hermite_function(x, n):
     # value based on the way hermval gets it
     coeffic_vector = torch.zeros([n + 1])
     coeffic_vector[n] = 1
-    # print("About to get the hermvals!")
     hermite_result = hermval(x, coeffic_vector, prob=False)
-    # hermite_component = wg_hermval(x, n, prob=False)
     if (hermite_result != hermite_result).any():
         print("hermite component has nans!")
         breakpoint()

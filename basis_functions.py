@@ -27,8 +27,7 @@ params:  a dictionary of parameters that contains the appropriate titles etc.
 for that set of polynomials.
 
 Default versions or generator functions
-can be created here to allow for ease of use.
-(i.e. available here and not necessary to hand-tune every time)
+can be created here to allow for ease of use. (i.e. available here and not necessary to hand-tune every time)
 
 Return value must be a torch.Tensor of dimension [n] only;
 not [n, 1] as is the inputs vector - this reflects explicitly that the output
@@ -105,12 +104,16 @@ class Basis:
 
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
+    print("THIS SHOULD NOT BE BEING USED ANYWHERE")
+    breakpoint()
     """
     The smooth exponential basis functions as constructed in Fasshauer (2012),
-    "second" paramaterisation.
+    "second" paramaterisation. It is orthogonal w.r.t the measure ρ(x)
+    described there.
 
     The Hermite function here is that constructed with the Physicist's Hermite
     Polynomial as opposed to the Probabilist's.
+
 
     : param x: the input points to evaluate the function at. Should be of
                dimensions [n,d]
@@ -148,9 +151,7 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
 
     # calculate the Hermite polynomial term
     # remember, deg = n-1
-    hermite_term = hermite_function(
-        alpha * beta * x, deg, include_constant=False, include_gaussian=False
-    )
+    hermite_term = hermite_function(alpha * beta * x, deg)
 
     # for numerical reasons, we can save the log of the absolute to get the
     #  right value,
@@ -172,9 +173,14 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
 
 
 def smooth_exponential_eigenvalues(deg: int, params: dict):
+    print("THIS SHOULD NOT BE BEING USED ANYWHERE")
+    breakpoint()
     """
     Returns the vector of eigenvalues, up to length deg, using the parameters
-    provided in params.
+    provided in params. This comes from Fasshauer2012 - where it is explained
+    that the smooth exponential basis is orthogonal w.r.t a given measure
+    (with precision alpha, etc.)
+
     :param deg: the degree up to which the eigenvalues should be computed.
     :param params: a dictionary of parameters whose keys included
     """
@@ -199,6 +205,7 @@ def smooth_exponential_eigenvalues(deg: int, params: dict):
         eigenvalue = torch.prod(lamda_d, dim=1)
         eigenvalues[i - 1] = eigenvalue
     # breakpoint()
+    breakpoint()
     return eigenvalues
 
 
@@ -231,6 +238,9 @@ def smooth_exponential_basis_fasshauer(
     # of the measure w.r.t the hermite functions are orthogonal
     c = torch.sqrt(a ** 2 + 2 * a * b)
     # sigma = torch.sqrt(params["variance_parameter"])
+    if (c != c).any():
+        print("c in fasshauer is NaN!")
+        breakpoint()
 
     # β = (1 + (2ε/α)^2)^(1/4)
     log_const_term = -0.5 * (
@@ -268,7 +278,31 @@ def smooth_exponential_eigenvalues_fasshauer(deg: int, params: dict):
     # construct the vector
     exponents = torch.linspace(0, deg - 1, deg)
     eigenvalues = left_term * torch.pow(right_term, exponents)
-    return eigenvalues
+    # breakpoint()
+    return eigenvalues.squeeze()
+
+
+def get_linear_coefficients_fasshauer(
+    intercept: torch.Tensor, slope: torch.Tensor, params: dict
+):
+    """
+    Returns the coefficients that represent a function that has the
+    same slope and intercept at 0 for the fasshauer parameterised smooth
+    exponential basis
+    ( i.e. smooth_exponential_basis_fasshauer().
+
+    :   param intercept: the intercept of the linear function we want to
+                         approximate
+    :   param slope:     the slope of the linear function we want to
+                         approximate
+    """
+    b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
+    a = torch.diag(params["precision_parameter"])  # precision
+    c = torch.sqrt(a ** 2 + 2 * a * b)
+
+    basis_intercept = intercept * torch.pow(a / c, 0.25)
+    basis_slope = 0.5 * slope * torch.pow(a, 0.25) / torch.pow(c, 0.75)
+    return (basis_intercept, basis_slope)
 
 
 def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
@@ -361,4 +395,8 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
                      tensors representing the upper and lower bound
                      over which the function is to be a basis respectively.
     """
+    pass
+
+
+if __name__ == "__main__":
     pass
