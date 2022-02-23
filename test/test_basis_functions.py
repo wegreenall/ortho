@@ -110,7 +110,7 @@ class TestChebyshevBasis(unittest.TestCase):
 
         self.subtest_count = 5
 
-        self.x = torch.linspace(self.lb, self.ub - 0.01, 1000)
+        self.x = torch.linspace(self.lb + 0.01, self.ub - 0.01, 1000)
         self.inputs = (2 * self.x - (self.ub + self.lb)) / (self.ub - self.lb)
         # weight_function = (
         # 2
