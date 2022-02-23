@@ -1,8 +1,10 @@
 import torch
 import torch.distributions as D
 from ortho.orthopoly import OrthogonalPolynomial
+
 from ortho.measure import L, coeffics_list
 import unittest
+import matplotlib.pyplot as plt
 
 
 class TestL(unittest.TestCase):
@@ -56,10 +58,20 @@ class TestOrthogonalPolynomials(unittest.TestCase):
     def setUp(self):
 
         # model hyperparameters
-        self.order = 10  # order
+        self.order = 5  # order
         self.sample_size = 1000
         self.ub = 10
         self.lb = 0
+        self.inputs = torch.linspace(0, 10, 1000)
+        self.eps = 1e-8
+        self.prob_polynomials = [
+            lambda x: torch.ones(x.shape),
+            lambda x: x,
+            lambda x: x ** 2 - 1,
+            lambda x: x ** 3 - 3 * x,
+            lambda x: x ** 4 - 6 * x ** 2 + 3,
+            lambda x: x ** 5 - 10 * x ** 3 + 15 * x,
+        ]
         return
 
     @unittest.skip("Not Implemented Yet.")
@@ -108,6 +120,24 @@ class TestOrthogonalPolynomials(unittest.TestCase):
             (torch.abs(torch.mean(func_means) - 1) < 0.00001).all()
         )
         # print("integral of square basis function: ", func_mean)
+
+    def test_correctness(self):
+        order = 5
+        betas = torch.zeros(order + 1)
+        gammas = torch.linspace(0, order, order + 1)
+        # gammas[0] = 0
+        poly = OrthogonalPolynomial(order, betas, gammas)
+        for i in range(order + 1):
+            outputs = poly(self.inputs, i, dict())
+            plt.plot(self.inputs, outputs)
+            plt.plot(self.inputs, self.prob_polynomials[i](self.inputs))
+            plt.show()
+            self.assertTrue(
+                (
+                    torch.abs(outputs - self.prob_polynomials[i](self.inputs))
+                    < self.eps
+                ).all()
+            )
 
 
 if __name__ == "__main__":

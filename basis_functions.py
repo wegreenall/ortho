@@ -279,6 +279,7 @@ def smooth_exponential_eigenvalues_fasshauer(deg: int, params: dict):
     exponents = torch.linspace(0, deg - 1, deg)
     eigenvalues = left_term * torch.pow(right_term, exponents)
     # breakpoint()
+    # breakpoint()
     return eigenvalues.squeeze()
 
 
