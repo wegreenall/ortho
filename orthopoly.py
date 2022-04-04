@@ -3,8 +3,8 @@ from typing import Dict
 import matplotlib.pyplot as plt
 
 """
-contains classes for construction of orthogonal polynomials. will also contain
-implementations of the classical orthogonal polynomials, as well as methods
+contains classes for construction of orthogonal polynomials. 
+as well as methods
 for getting the measure/weight function
 """
 
@@ -17,9 +17,9 @@ class OrthogonalPolynomialSeries:
         the Clenshaw recursion algorithm.
 
         From wikipedia:
-            The Clenshaw recursion algorithm computes the weighted sum of a finite
-            series of functions φ_k(x):
-                S(x) = \sum_{k=0}^n a_k φ_k(x)
+            The Clenshaw recursion algorithm computes the weighted sum of a
+            finite series of functions φ_k(x):
+                S(x) = sum_{k=0}^n a_k φ_k(x)
             where:
                 φ_{k+1}(x) = Θ_k(x) φ_k(x) + δ_k(x) φ_{k-1}
 
@@ -62,12 +62,28 @@ class OrthogonalPolynomialSeries:
             return f_0_term + f_1_term
 
     def _get_clenshaw_thetas(self):
+        """
+        Returns the sequence of θ (note the notation in the docstring for
+        this class's __init__ function).
+
+        The θ in this notation represent the _function_ of x that is the
+        coefficient for P_n in the recurision. In the Favard case, we have:
+                                θ_n(x) = (x - β_n)
+        """
         thetas = list()
         for beta in self.betas:
             thetas.append(lambda x, n=beta: x - n)
         return thetas
 
     def _get_clenshaw_deltas(self):
+        """
+        Returns the sequence of δ (note the notation in the docstring for
+        this class's __init__ function).
+
+        The δ in this notation represent the _function_ of x that is the
+        coefficient for P_n in the recurision. In the Favard case, we have:
+                                δ_n(x) = ( - γ_n)
+        """
         deltas = list()
         for gamma in self.gammas:
             print(gamma)
@@ -75,6 +91,13 @@ class OrthogonalPolynomialSeries:
         return deltas
 
     def _compute_b_terms(self):
+        """
+        The Clenshaw algorithm requires construction of the sequence of b terms
+        (note the notation in the docstring for
+        this class's __init__ function).
+
+        Having constructed the b terms, we can build the sum of the functions.
+        """
         self.b_terms = list()
 
         def b(k):
@@ -143,7 +166,7 @@ class OrthogonalPolynomial:
 
     def get_order(self):
         """
-        Returns the order of this polynomial
+        Returns the order of this polynomial.
         """
         return self.order
 
@@ -151,18 +174,19 @@ class OrthogonalPolynomial:
         """
         Setter for betas on orthogonal polynomial.
 
-        validates w.r.t the fact that the betas are positive.
         """
-        assert (betas >= 0).all(), "Please make sure all betas are positive"
+        # assert (betas >= 0).all(), "Please make sure all betas are positive"
         self.betas = betas
 
     def set_gammas(self, gammas):
         """
         Setter for gammas on orthogonal polynomial.
-
-        validates w.r.t the fact that γ_0 is positive.
+        Validates that the initial gamma is set to 1; they also all need
+        to be positive so that the corresponding linear moment functional
+        is positive definite.
         """
-        # assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        assert (gammas > 0).all(), "Please make sure gammas > 0"
         self.gammas = gammas
 
     def get_betas(self):
@@ -217,6 +241,7 @@ def get_measure_from_poly(
         Σ_ι  μ_i x^i / i!
 
     """
+
     raise NotImplementedError
 
 
@@ -256,12 +281,12 @@ def get_poly_from_moments(moments: list) -> SymmetricOrthogonalPolynomial:
 
 
 if __name__ == "__main__":
-    check_ortho_poly = False
-    check_sym_poly = False
+    check_ortho_poly = True
+    check_sym_poly = True
     check_orthopolyseries = True
     from torch import distributions as D
 
-    order = 10
+    order = 20
     betas = D.Exponential(2.0).sample([order])
     gammas = D.Exponential(2.0).sample([order])
     gammas[0] = 1
