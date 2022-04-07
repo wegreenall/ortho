@@ -2,56 +2,56 @@ import torch
 import torch.distributions as D
 from ortho.orthopoly import OrthogonalPolynomial
 
-from ortho.measure import L, coeffics_list
+# from ortho.measure import coeffics_list
 import unittest
 import matplotlib.pyplot as plt
 
 
-class TestL(unittest.TestCase):
-    def setUp(self):
-        self.order = 3
+# class TestL(unittest.TestCase):
+# def setUp(self):
+# self.order = 3
 
-        # build random betas and gammas
+# # build random betas and gammas
 
-        # self.betas = torch.ones(self.order)
-        # self.gammas = torch.ones(self.order)
-        self.betas = D.Exponential(1.0).sample([self.order])
-        self.gammas = D.Exponential(1.0).sample([self.order])
-        self.gammas[0] = 1
+# # self.betas = torch.ones(self.order)
+# # self.gammas = torch.ones(self.order)
+# self.betas = D.Exponential(1.0).sample([self.order])
+# self.gammas = D.Exponential(1.0).sample([self.order])
+# self.gammas[0] = 1
 
-        self.poly = OrthogonalPolynomial(self.order, self.betas, self.gammas)
+# self.poly = OrthogonalPolynomial(self.order, self.betas, self.gammas)
 
-        self.test_coeffics = [
-            torch.Tensor([1.0]),  # for μ_0
-            torch.Tensor([-self.betas[0], 1.0]),  # for μ_1
-            torch.Tensor([-self.gammas[1], -self.betas[0], 1.0]),  # for μ_2
-            torch.Tensor(  # for μ_3
-                [
-                    0,
-                    -(self.gammas[1] - self.betas[0] * self.betas[1]),
-                    -(self.betas[0] + self.betas[1]),
-                    1.0,
-                ]
-            ),
-        ]
+# self.test_coeffics = [
+# torch.Tensor([1.0]),  # for μ_0
+# torch.Tensor([-self.betas[0], 1.0]),  # for μ_1
+# torch.Tensor([-self.gammas[1], -self.betas[0], 1.0]),  # for μ_2
+# torch.Tensor(  # for μ_3
+# [
+# 0,
+# -(self.gammas[1] - self.betas[0] * self.betas[1]),
+# -(self.betas[0] + self.betas[1]),
+# 1.0,
+# ]
+# ),
+# ]
 
-    def test_L(self):
-        # tests for the correct construction of the coefficients for the
-        # generation of the moments of the linear function w.r.t a given
-        # orthogonal polynomial system is orthogonal
-        for order in range(self.order):
-            with self.subTest(i=order):
-                coeffics = coeffics_list(order)
-                loc = (0, order)
-                value = 1
-                L(loc, value, coeffics, self.poly)
-                final_coeffics = coeffics.get_vals()
-                # print("final_coeffics", final_coeffics)
-                # breakpoint()
-                eps = 0.000001
-                self.assertTrue(
-                    (final_coeffics - self.test_coeffics[order] < eps).all()
-                )
+# def test_L(self):
+# # tests for the correct construction of the coefficients for the
+# # generation of the moments of the linear function w.r.t a given
+# # orthogonal polynomial system is orthogonal
+# for order in range(self.order):
+# with self.subTest(i=order):
+# coeffics = coeffics_list(order)
+# loc = (0, order)
+# value = 1
+# L(loc, value, coeffics, self.poly)
+# final_coeffics = coeffics.get_vals()
+# # print("final_coeffics", final_coeffics)
+# # breakpoint()
+# eps = 0.000001
+# self.assertTrue(
+# (final_coeffics - self.test_coeffics[order] < eps).all()
+# )
 
 
 class TestOrthogonalPolynomials(unittest.TestCase):

@@ -1,5 +1,6 @@
 # basis_functions.py
 import math
+from ortho.orthopoly import OrthonormalPolynomial
 
 # import matplotlib
 # matplotlib.use("Qt5Agg")
@@ -27,7 +28,8 @@ params:  a dictionary of parameters that contains the appropriate titles etc.
 for that set of polynomials.
 
 Default versions or generator functions
-can be created here to allow for ease of use. (i.e. available here and not necessary to hand-tune every time)
+can be created here to allow for ease of use. (i.e. available here and not
+necessary to hand-tune every time
 
 Return value must be a torch.Tensor of dimension [n] only;
 not [n, 1] as is the inputs vector - this reflects explicitly that the output
@@ -41,7 +43,7 @@ class Basis:
         basis_function: Callable,
         dimension: int,
         order: int,
-        params: dict,
+        params: dict = None,
     ):
         self.dimension = dimension
         self.order = order
@@ -51,10 +53,10 @@ class Basis:
         :param basis function: the basis function to use in this
                                Basis class - i.e., smooth_exponential_basis.
 
-                               Expected to have signature:
-                                   basis_function(x: torch.Tensor,
-                                                  deg: int,
-                                                  params: dict)
+                Expected to have signature:
+                                basis_function(x: torch.Tensor,
+                                               deg: int,
+                                               params: dict)
 
 
         """
@@ -68,11 +70,7 @@ class Basis:
 
     def __call__(self, x):
         """
-        Returns the whole basis evaluated at an input. The multiplier function
-        multiplies the basis - this is used for constructing the derivative
-        of the Mercer Smooth Exponential GP.  This is almost certainly not the
-        best way to do it - as it would be nice to vectorise it. However this
-        is fine for now
+        Returns the whole basis evaluated at an input.
 
         The return shape:
 
@@ -103,9 +101,36 @@ class Basis:
         return self.params
 
 
+class OrthonormalBasis(Basis):
+    def __init__(
+        self,
+        basis_function: OrthonormalPolynomial,
+        weight_function: Callable,
+        dimension: int,
+        order: int,
+        params: dict = None,
+    ):
+        assert (
+            type(basis_function) == OrthonormalPolynomial
+        ), "the basis function should be of type OrthonormalPolynomial"
+        super().__init__(basis_function, dimension, order, params)
+        self.weight_function = weight_function
+
+    def __call__(self, x):
+        """
+        Returns the whole basis evaluated at an input. The difference for an
+        orthonormal basis is that the weight function and normalising constant
+        can be applied "outside" the tensor of orthogonal polynomials,
+        so it is feasible to do this separately and therefore faster.
+        """
+        ortho_poly_basis = super().__call__(x)
+        result = torch.sqrt(self.weight_function(x))
+        return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
+
+
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
     print("THIS SHOULD NOT BE BEING USED ANYWHERE")
-    breakpoint()
+    # breakpoint()
     """
     The smooth exponential basis functions as constructed in Fasshauer (2012),
     "second" paramaterisation. It is orthogonal w.r.t the measure ρ(x)
@@ -174,7 +199,7 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
 
 def smooth_exponential_eigenvalues(deg: int, params: dict):
     print("THIS SHOULD NOT BE BEING USED ANYWHERE")
-    breakpoint()
+    # breakpoint()
     """
     Returns the vector of eigenvalues, up to length deg, using the parameters
     provided in params. This comes from Fasshauer2012 - where it is explained
@@ -223,7 +248,10 @@ def smooth_exponential_basis_fasshauer(
     : param x: the input points to evaluate the function at. Should be of
                dimensions [n,d]
     : param deg: degree of polynomial used in construction of func
-    : param params: dict of parameters. keys set on case-by-case basis
+    : param params: dict of parameters.
+                    Required keys:
+                        - precision_parameter
+                        - ard_parameter
     """
     # breakpoint()
     if deg > 42:
