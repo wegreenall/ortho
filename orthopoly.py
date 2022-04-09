@@ -1,21 +1,19 @@
 import torch
 from typing import Dict
 import matplotlib.pyplot as plt
+from ortho.measure import MaximalEntropyDensity
 
-
-# from ortho.measure import L, coeffics_list
-
-# from framework.basis_functions import Basis
+# from time import sleep
 
 """
-contains classes for construction of orthogonal polynomials. will also contain
-implementations of the classical orthogonal polynomials, as well as methods
+contains classes for construction of orthogonal polynomials.
+as well as methods
 for getting the measure/weight function
 """
 
 
 class OrthogonalPolynomial:
-    def __init__(self, order, betas, gammas):
+    def __init__(self, order, betas, gammas, leading=1):
         """
         A system of orthogonal polynomials has the property that:
 
@@ -29,7 +27,8 @@ class OrthogonalPolynomial:
             P_0(x) = 1 and P_1(x) = x
 
         Construction then of an arbitrary orthogonal polynomial sequence should
-        involve setting the betas and the gammas
+        involve setting the betas and the gammas appropriate for a given
+        application
         """
         self.order = order
 
@@ -40,21 +39,30 @@ class OrthogonalPolynomial:
         self.set_betas(betas)
         self.set_gammas(gammas)
 
-    def __call__(self, x: torch.Tensor, deg: int, params: dict):
-        """ """
+        self.leading = leading
+        return
+
+    def __call__(
+        self, x: torch.Tensor, deg: int, params: dict
+    ) -> torch.Tensor:
+        """This produces the value of the polynomial by constructing the
+        fundamental recursion."""
+        if deg > self.order:
+            raise ValueError("The order of this polynomial is not high enough")
         if deg == 0:
-            return 1
+            result = torch.ones(x.shape)
         elif deg == 1:
-            return x - self.betas[0]
+            result = self.leading * (x - self.betas[0])
+            # breakpoint()
         else:
-            return (x - self.betas[deg]) * self(
+            result = (self.leading * x - self.betas[deg - 1]) * self(
                 x, deg - 1, params
-            ) - self.gammas[deg] * self(x, deg - 2, params)
-        pass
+            ) - self.gammas[deg - 1] * self(x, deg - 2, params)
+        return result
 
     def get_order(self):
         """
-        Returns the order of this polynomial
+        Returns the order of this polynomial.
         """
         return self.order
 
@@ -62,18 +70,19 @@ class OrthogonalPolynomial:
         """
         Setter for betas on orthogonal polynomial.
 
-        validates w.r.t the fact that the betas are positive.
         """
-        assert (betas >= 0).all(), "Please make sure all betas are positive"
+        # assert (betas >= 0).all(), "Please make sure all betas are positive"
         self.betas = betas
 
     def set_gammas(self, gammas):
         """
         Setter for gammas on orthogonal polynomial.
-
-        validates w.r.t the fact that γ_0 is positive.
+        Validates that the initial gamma is set to 1; they also all need
+        to be positive so that the corresponding linear moment functional
+        is positive definite.
         """
-        assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        # assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        assert (gammas >= 0).all(), "Please make sure gammas > 0"
         self.gammas = gammas
 
     def get_betas(self):
@@ -81,6 +90,47 @@ class OrthogonalPolynomial:
 
     def get_gammas(self):
         return self.gammas
+
+
+class OrthonormalPolynomial(OrthogonalPolynomial):
+    def set_gammas(self, gammas):
+        super().set_gammas(gammas)
+
+    def __call__(self, x: torch.Tensor, deg: int, params: dict):
+        result = super().__call__(x, deg, params)
+        normalising_coefficient = torch.prod(self.gammas[1:deg])
+        return result / normalising_coefficient
+
+
+class OrthogonalBasisFunction(OrthogonalPolynomial):
+    def __init__(
+        self, order, betas: torch.Tensor, gammas: torch.Tensor, leading=1
+    ):
+        """
+        Subclasses the OrthogonalPolynomialFunction
+        to multiply by the weight function.
+        """
+        super().__init__(order, betas, gammas, leading)
+        # moment_net = CatNet(order, betas, gammas)
+        self.med = MaximalEntropyDensity(order, betas, gammas)
+        pass
+
+    def __call__(self, x: torch.Tensor, deg: int, params: dict):
+        """
+        Calls first the orthogonal polynomial component, and then
+        builds the weight function component.
+        """
+        ortho_poly_term = super().__call__(x, deg, params)
+        med_term = torch.sqrt(self.med(x))
+        # layer = self.med.moment_net.layers[-1]
+        # print(layer.weight)
+        return ortho_poly_term  # * med_term
+
+    def get_weight(self, x: torch.Tensor, params: dict):
+        return torch.sqrt(self.mex(x, self.betas, self.gammas))
+
+    # def get_parameters(self):
+    # return self.med.moment_net.layers[-1].weight
 
 
 def get_measure_from_poly(
@@ -128,11 +178,8 @@ def get_measure_from_poly(
         Σ_ι  μ_i x^i / i!
 
     """
-    # mu_0 = initial_moment
-    # betas = poly.get_betas()
-    # gammas = poly.get_gammas()
 
-    return betas
+    raise NotImplementedError
 
 
 class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
@@ -170,33 +217,163 @@ def get_poly_from_moments(moments: list) -> SymmetricOrthogonalPolynomial:
     return SymmetricOrthogonalPolynomial(order, gammas)
 
 
+class OrthogonalPolynomialSeries:
+    def __init__(self, coefficients, order, betas, gammas, leading=1):
+        """Using Clenshaw recursion, we can build a series based on orthogonal
+        polynomials by utilising Favard's three-term recursion theorem, and
+        the Clenshaw recursion algorithm.
+
+        From wikipedia:
+            The Clenshaw recursion algorithm computes the weighted sum of a
+            finite series of functions φ_k(x):
+                S(x) = sum_{k=0}^n a_k φ_k(x)
+            where:
+                φ_{k+1}(x) = Θ_k(x) φ_k(x) + δ_k(x) φ_{k-1}
+
+            First we compute a sequence {b_k}:
+                b_{n+2}(x) = b_{n+1}(x) = 0
+                b_k(x) = a_k + θ_k(x)b_{k+1} + δ_{k+1}(x) b_{k+2}(x)
+
+            Then, once one has {b_k}, the sum can be written:
+                S(x) = φ_0(x)(a_0 + β_1(x) b_2(x)) + φ_1(x)b_1(x)
+
+        Since by the Favard's theorem, for orthogonal polynomials
+            φ_1(x) = x and φ_0(x) = 1
+
+        We just use (a_0 + β_1(χ)β_2(χ)) + x b_1(x)
+        """
+        self.coefficients = coefficients  # a_k
+        self.order = order
+        self.betas = betas
+        self.gammas = gammas
+
+        self.thetas = self._get_clenshaw_thetas()
+        self.deltas = self._get_clenshaw_deltas()
+        # breakpoint()
+        self._compute_b_terms()
+        pass
+
+    def __call__(self, x):
+        if self.order == 0:
+            return self.coefficients[0] * torch.ones(x.shape)
+        if self.order == 1:
+            return (
+                self.coefficients[0] * torch.ones(x.shape)
+                + (x - self.betas[0]) * self.coefficients[1]
+            )
+        else:
+            f_0_term = self.coefficients[0] + self.deltas[1](x) * self.b_terms[
+                2
+            ](x)
+            f_1_term = (x - self.betas[0]) * self.b_terms[1](x)
+            return f_0_term + f_1_term
+
+    def _get_clenshaw_thetas(self):
+        """
+        Returns the sequence of θ (note the notation in the docstring for
+        this class's __init__ function).
+
+        The θ in this notation represent the _function_ of x that is the
+        coefficient for P_n in the recurision. In the Favard case, we have:
+                                θ_n(x) = (x - β_n)
+        """
+        thetas = list()
+        for beta in self.betas:
+            thetas.append(lambda x, n=beta: x - n)
+        return thetas
+
+    def _get_clenshaw_deltas(self):
+        """
+        Returns the sequence of δ (note the notation in the docstring for
+        this class's __init__ function).
+
+        The δ in this notation represent the _function_ of x that is the
+        coefficient for P_n in the recurision. In the Favard case, we have:
+                                δ_n(x) = ( - γ_n)
+        """
+        deltas = list()
+        for gamma in self.gammas:
+            print(gamma)
+            deltas.append(lambda x, n=gamma: -n * torch.ones(x.shape))
+        return deltas
+
+    def _compute_b_terms(self):
+        """
+        The Clenshaw algorithm requires construction of the sequence of b terms
+        (note the notation in the docstring for
+        this class's __init__ function).
+
+        Having constructed the b terms, we can build the sum of the functions.
+        """
+        self.b_terms = list()
+
+        def b(k):
+            if k == self.order + 2 or k == self.order + 1:
+                return lambda x: torch.zeros(x.shape)
+            elif k == self.order:
+                return lambda x: self.coefficients[k] * torch.ones(x.shape)
+            elif k == self.order - 1:
+                return (
+                    lambda x: self.coefficients[k]
+                    + self.thetas[k](x) * b(k + 1)(x)
+                    + self.deltas[k + 1](x) * b(k + 2)(x)
+                )
+            elif k <= self.order - 2:
+                return (
+                    lambda x: self.coefficients[k]
+                    + self.thetas[k](x) * b(k + 1)(x)
+                    + self.deltas[k + 1](x) * b(k + 2)(x)
+                )
+
+        for k in range(self.order + 2):
+            self.b_terms.append(b(k))
+
+
 if __name__ == "__main__":
+    check_ortho_poly = True
+    check_sym_poly = True
+    check_orthopolyseries = True
     from torch import distributions as D
 
-    order = 4
-    # betas = torch.ones(order)
-    # gammas = torch.linspace(0, order, order)
-    betas = D.Exponential(10.0).sample([order])
-    gammas = D.Exponential(10.0).sample([order])
+    order = 20
+    betas = D.Exponential(2.0).sample([order])
+    gammas = D.Exponential(2.0).sample([order])
     gammas[0] = 1
-
-    poly = OrthogonalPolynomial(order, betas, gammas)
 
     x = torch.linspace(-3, 3, 100)
     params: Dict = dict()
-    func = poly(x, 3, params)
-    plt.plot(x, func)
-    plt.show()
+    if check_ortho_poly:
+        poly = OrthogonalPolynomial(order, betas, gammas)
 
-    sym_poly = SymmetricOrthogonalPolynomial(order, gammas)
-    sym_func = sym_poly(x, 2, params)
-    plt.plot(x, sym_func)
-    plt.show()
+        func = poly(x, 3, params)
+        plt.plot(x, func)
+        plt.show()
 
-    # checking the moments from the polynomial thing works
-    # coeffics = coeffics_list(order)
-    # loc = (0, order)
-    # value = 1
-    # L(loc, value, coeffics, poly)
-    # final_coeffics = coeffics.get_vals()
-    # print("final_coeffics:", final_coeffics)
+    if check_sym_poly:
+        sym_poly = SymmetricOrthogonalPolynomial(order, gammas)
+        sym_func = sym_poly(x, 2, params)
+        plt.plot(x, sym_func)
+        plt.show()
+
+    if check_orthopolyseries:
+        betas = torch.zeros(order + 1)
+        gammas = torch.linspace(0, order, order + 1)
+        # gammas[0] = 0
+
+        standard_orthopoly = OrthogonalPolynomial(order + 1, betas, gammas)
+        summed_poly_series = torch.zeros(x.shape)
+        for i in range(order + 1):
+            # summed_poly_series +=
+            print("polynomial order:", i)
+            summed_poly_series += standard_orthopoly(x, i, dict())
+
+        # plt.plot(x, summed_poly_series, color=black")
+        print("number of summed terms:", i)
+
+        # now do it with the OrthopolySeries
+        orthopoly_series = OrthogonalPolynomialSeries(
+            torch.ones(order + 1), order, betas, gammas
+        )
+        values = orthopoly_series(x)
+        plt.plot(x, values - summed_poly_series, color="red")
+        plt.show()
