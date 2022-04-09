@@ -42,7 +42,9 @@ class OrthogonalPolynomial:
         self.leading = leading
         return
 
-    def __call__(self, x: torch.Tensor, deg: int, params: dict):
+    def __call__(
+        self, x: torch.Tensor, deg: int, params: dict
+    ) -> torch.Tensor:
         """This produces the value of the polynomial by constructing the
         fundamental recursion."""
         if deg > self.order:
