@@ -129,9 +129,9 @@ class TestOrthogonalPolynomials(unittest.TestCase):
         poly = OrthogonalPolynomial(order, betas, gammas)
         for i in range(order + 1):
             outputs = poly(self.inputs, i, dict())
-            plt.plot(self.inputs, outputs)
-            plt.plot(self.inputs, self.prob_polynomials[i](self.inputs))
-            plt.show()
+            # plt.plot(self.inputs, outputs)
+            # plt.plot(self.inputs, self.prob_polynomials[i](self.inputs))
+            # plt.show()
             self.assertTrue(
                 (
                     torch.abs(outputs - self.prob_polynomials[i](self.inputs))

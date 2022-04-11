@@ -125,7 +125,16 @@ class OrthonormalBasis(Basis):
         """
         ortho_poly_basis = super().__call__(x)
         result = torch.sqrt(self.weight_function(x))
+        # result = torch.ones(x.shape)
         return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
+
+    def set_gammas(self, gammas):
+        """
+        Updates the gammas on the basis function and the
+        weight function.
+        """
+        self.basis_function.set_gammas(gammas)
+        self.weight_function.set_gammas(gammas)
 
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
