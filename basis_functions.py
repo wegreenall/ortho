@@ -123,8 +123,15 @@ class OrthonormalBasis(Basis):
         can be applied "outside" the tensor of orthogonal polynomials,
         so it is feasible to do this separately and therefore faster.
         """
+        # epsilon = 1e-10
         ortho_poly_basis = super().__call__(x)
-        result = torch.sqrt(self.weight_function(x))
+        result = torch.sqrt(
+            self.weight_function(x)
+        )  # there is a problem in here...
+        # result = self.weight_function(x)
+        # print(result)
+        # result += epsilon
+        # result = torch.ones(x.shape)
         return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
 
 

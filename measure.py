@@ -37,16 +37,32 @@ class MaximalEntropyDensity:
         pass
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        # xsigns = torch.sign(x)
+        """
+        Returns the maximal entropy density at the input
+        tensor x.
+
+        The maximal entropy density is:
+            torch.exp(-m'{M^-1}X)
+
+        where X is a vector containing the values of x
+        raised to the corresponding power (i.e. is of shape
+                m x N
+        )
+
+        """
         if len(x.shape) > 1:
             x = x.squeeze()
-
         poly_term = self.get_poly_term(x)
         lambdas = self._prep_lambdas()
-
-        return torch.exp(-torch.einsum("ij, j -> i", poly_term, lambdas))
+        result = torch.einsum("ij, j -> i", poly_term, lambdas)
+        return torch.exp(-result)
 
     def get_poly_term(self, x):
+        """
+        Receiving a tensor of shape [n],
+        returns a tensor of shape [n x m], which
+        consists of x raised to the m-th power.
+        """
         z = x.repeat(self.order + 1, 1)
         powers_of_x = torch.pow(
             z.t(), torch.linspace(0, self.order, self.order + 1)
@@ -54,6 +70,10 @@ class MaximalEntropyDensity:
         return powers_of_x
 
     def _prep_lambdas(self):
+        """
+        Prepares the lambdas which are the solution of the system:
+            λM  = m
+        """
         moments = self.moment_generator()
         moment_vector = moments[: self.order + 1]
         moment_matrix = moments.unfold(0, self.order + 1, 1)  # moment matrix
@@ -77,12 +97,17 @@ class MaximalEntropyDensity:
         return lambdas
 
     def moment_generator(self):
+        """
+        Returns the vector of moments corresponding to the
+        current betas and gammas by constructing the
+        Catalan matrix by the recurrence described in Aigner (2006).
+        """
         order = len(self.betas)
         ones = torch.ones(order)
         cat_matrix = torch.zeros(order + 2, order + 2)
         cat_matrix[0, 0] = 1
         # jordan = jordan_matrix(betas, gammas)
-        for n in range(1, order):
+        for n in range(1, order + 1):
             # breakpoint()
             cat_matrix[n, 1:-1] = (
                 cat_matrix[n - 1, :-2].clone() * ones
@@ -351,11 +376,14 @@ if __name__ == "__main__":
     order = 30
 
     test_cat_net = False
-    test_moment_gen = True
+    test_moment_gen = False
+    test_poly_term = True
+    start_point = 1
+    fineness = 2000
+    x_axis = torch.linspace(-start_point, start_point, fineness)
     # build random betas and gammas
     if test_cat_net:
         for i in range(1, 10):
-            start_point = 5
             betas = 0 * torch.ones(2 * order + 1)
             # betas = D.Normal(0.0, 0.2).sample([2 * order + 1])
             # gammas = i * torch.ones(2 * order + 1)
@@ -367,7 +395,6 @@ if __name__ == "__main__":
 
             my_net = CatNet(order, betas, gammas)
             my_measure = MaximalEntropyDensity(my_net, order)
-            fineness = 2000
             x_axis = torch.linspace(-start_point, start_point, fineness)
             measure_values = my_measure(x_axis)
             breakpoint()
@@ -381,6 +408,16 @@ if __name__ == "__main__":
         catalans = MomentGenerator()
         result = catalans(betas, gammas)
         print(result)
+
+    if test_poly_term:
+        betas = 0 * torch.ones(2 * order + 1)
+        gammas = 1 * torch.ones(2 * order + 1)
+        my_measure = MaximalEntropyDensity(order, betas, gammas)
+        poly_term = my_measure.get_poly_term(x_axis)
+        plt.plot(x_axis, poly_term)
+        breakpoint()
+        plt.show()
+
     # poly = OrthogonalPolynomial(order, betas, gammas)
     # mus = get_moments_from_poly(poly)
     # print("moments from a random polynomial linear moment functional:", mus)

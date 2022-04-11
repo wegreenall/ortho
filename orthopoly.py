@@ -121,13 +121,13 @@ class OrthogonalBasisFunction(OrthogonalPolynomial):
         builds the weight function component.
         """
         ortho_poly_term = super().__call__(x, deg, params)
-        med_term = torch.sqrt(self.med(x))
+        # med_term = torch.sqrt(self.med(x))
         # layer = self.med.moment_net.layers[-1]
         # print(layer.weight)
         return ortho_poly_term  # * med_term
 
     def get_weight(self, x: torch.Tensor, params: dict):
-        return torch.sqrt(self.mex(x, self.betas, self.gammas))
+        return torch.sqrt(self.med(x, self.betas, self.gammas))
 
     # def get_parameters(self):
     # return self.med.moment_net.layers[-1].weight
