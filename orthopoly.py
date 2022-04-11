@@ -99,7 +99,7 @@ class OrthonormalPolynomial(OrthogonalPolynomial):
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         result = super().__call__(x, deg, params)
         normalising_coefficient = torch.prod(self.gammas[1:deg])
-        return result / normalising_coefficient
+        return result / torch.sqrt(normalising_coefficient)
 
 
 class OrthogonalBasisFunction(OrthogonalPolynomial):

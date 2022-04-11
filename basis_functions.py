@@ -1,6 +1,6 @@
 # basis_functions.py
 import math
-from ortho.orthopoly import OrthonormalPolynomial
+from ortho.orthopoly import OrthogonalPolynomial
 
 # import matplotlib
 # matplotlib.use("Qt5Agg")
@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 
 # from framework import special, utils
-from polynomials import chebyshev_first, chebyshev_second
+from ortho.polynomials import chebyshev_first, chebyshev_second
 from typing import Callable
 
 from ortho.special import hermite_function
@@ -104,15 +104,15 @@ class Basis:
 class OrthonormalBasis(Basis):
     def __init__(
         self,
-        basis_function: OrthonormalPolynomial,
+        basis_function: OrthogonalPolynomial,
         weight_function: Callable,
         dimension: int,
         order: int,
         params: dict = None,
     ):
-        assert (
-            type(basis_function) == OrthonormalPolynomial
-        ), "the basis function should be of type OrthonormalPolynomial"
+        assert isinstance(
+            basis_function, OrthogonalPolynomial
+        ), "the basis function should be of type OrthogonalPolynomial"
         super().__init__(basis_function, dimension, order, params)
         self.weight_function = weight_function
 
