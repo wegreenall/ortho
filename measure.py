@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import Module
 import torch.distributions as D
 from typing import Tuple
+import math
 
 # from ortho.orthopoly import OrthogonalPolynomial
 # from ortho.inverse_laplace import build_inverse_laplace_from_moments
@@ -42,13 +43,29 @@ class MaximalEntropyDensity:
         poly_term = self._get_poly_term(x)
         lambdas = self._get_lambdas()
         # breakpoint()
-        return torch.exp(-torch.einsum("ij,j->i", poly_term, lambdas))
+        polytermwithlambdas = torch.einsum("ij,j->i", poly_term, lambdas)
+        if (polytermwithlambdas == math.inf).any():
+            print("Inf in polyterm...")
+            breakpoint()
+        result = torch.exp(-polytermwithlambdas)
+        if (result == math.inf).any():
+
+            print("\nInf in result(exp(-polytermwithlambdas)...\n")
+            print(
+                "Masking infs with 0. This is not the right thing to do\
+                but it is what I can think of right now"
+            )
+            result = torch.nan_to_num(result)
+            breakpoint()
+
+        return result
 
     def _get_poly_term(self, x: torch.Tensor) -> torch.Tensor:
-        z = x.repeat(self.order + 1, 1)
+        z = x.repeat(self.order, 1)
         powers_of_x = torch.pow(
-            z.t(), torch.linspace(0, self.order, self.order + 1)
+            z.t(), torch.linspace(1, self.order, self.order)
         )
+
         return powers_of_x
 
     def _get_moments(self) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -63,7 +80,12 @@ class MaximalEntropyDensity:
         """
         cat_matrix = torch.zeros(2 * self.order + 2, 2 * self.order + 2)
         cat_matrix[0, 1] = 1
-        # jordan = jordan_matrix(betas, gammas)
+
+        """
+        The following loop builds out the Catalan matrix. it does this
+        inside a padded matrix so that the recursion is simple for the edge cases
+        (by having terms "outside" the matrix be 0).
+        """
         for n in range(1, 2 * self.order + 1):
             cat_matrix[n, 1:-1] = (
                 cat_matrix[n - 1, :-2].clone()
@@ -71,11 +93,18 @@ class MaximalEntropyDensity:
                 + cat_matrix[n - 1, 2:].clone() * self.gammas
             )
 
-        moment_vector = cat_matrix[0:-1, 1]
-        moment_matrix = moment_vector.unfold(
-            0, self.order + 1, 1
-        )  # moment matrix
-        return moment_vector[: self.order + 1], moment_matrix
+        """
+        We construct the moments up to 2*self.order and then use unfold
+        to loop the same vector round to make the Hankel matrix.
+        """
+        moment_vector = cat_matrix[1:-1, 1]  # contains up to 2m
+        moment_matrix = moment_vector.unfold(0, self.order, 1)[
+            1:, :
+        ]  # moment matrix
+        return (
+            moment_vector[: self.order],
+            moment_matrix,
+        )
 
     def _get_lambdas(self) -> torch.Tensor:
         """
@@ -84,19 +113,25 @@ class MaximalEntropyDensity:
         """
         # get the moments vector
         moment_vector, moment_matrix = self._get_moments()
-        system_matrix = torch.einsum(
-            "i, j, ij -> ij",
-            1 / torch.linspace(2, self.order + 1, self.order + 1),
-            torch.linspace(1, self.order + 1, self.order + 1),
-            moment_matrix,
+        """
+        ratios_matrix R_{ij} = j/(i+1)
+        """
+        ratios_matrix = torch.einsum(
+            "i, j -> ij",
+            1 / torch.linspace(2, self.order + 1, self.order),
+            torch.linspace(1, self.order, self.order),
         )
+
+        system_matrix = ratios_matrix * moment_matrix
         # breakpoint()
-        return torch.linalg.solve(system_matrix, moment_vector)
+        lambdas = torch.linalg.solve(system_matrix, moment_vector)
+        return lambdas
 
     def set_betas(self, betas):
         self.betas = betas
 
     def set_gammas(self, gammas):
+        print("In set_gammas in MaximalEntropyDensity, and γ_0 = ", gammas[0])
         assert (gammas > 0).all(), "Please ensure gammas are non-negative."
         self.gammas = gammas
 
@@ -480,8 +515,12 @@ if __name__ == "__main__":
         betas = 0 * torch.ones(2 * order)
         gammas = 1 * torch.ones(2 * order)
 
-        med = MaximalEntropyDensityRW(order, betas, gammas)
-        moments = med._get_moments()
+        med = MaximalEntropyDensity(order, betas, gammas)
+        x = torch.linspace(-5, 5, 1000)
+        vals = med(x)
+        plt.plot(x, vals)
+        plt.show()
+        # moments = med._get_moments()
         # print(result)
     # poly = OrthogonalPolynomial(order, betas, gammas)
     # mus = get_moments_from_poly(poly)

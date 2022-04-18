@@ -82,6 +82,7 @@ class OrthogonalPolynomial:
         is positive definite.
         """
         # assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        print("In set_gammas in OrthogonalPolynomial, and γ_0 = ", gammas[0])
         assert (gammas >= 0).all(), "Please make sure gammas > 0"
         self.gammas = gammas
 
@@ -93,8 +94,8 @@ class OrthogonalPolynomial:
 
 
 class OrthonormalPolynomial(OrthogonalPolynomial):
-    def set_gammas(self, gammas):
-        super().set_gammas(gammas)
+    # def set_gammas(self, gammas):
+    # super().set_gammas(gammas)
 
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         result = super().__call__(x, deg, params)

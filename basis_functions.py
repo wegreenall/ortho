@@ -34,6 +34,8 @@ necessary to hand-tune every time
 Return value must be a torch.Tensor of dimension [n] only;
 not [n, 1] as is the inputs vector - this reflects explicitly that the output
 would be 1-d (2-d inputs would be of shape [n,2]). The result of this is that
+multi-dimensional problems require the construction of the tensor product 
+formulation of an orthonormal basis.
 """
 
 
