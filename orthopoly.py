@@ -82,7 +82,7 @@ class OrthogonalPolynomial:
         is positive definite.
         """
         # assert gammas[0] == 1, "Please make sure gammas[0] = 1"
-        print("In set_gammas in OrthogonalPolynomial, and γ_0 = ", gammas[0])
+        # print("In set_gammas in OrthogonalPolynomial, and γ_0 = ", gammas[0])
         assert (gammas >= 0).all(), "Please make sure gammas > 0"
         self.gammas = gammas
 
@@ -128,10 +128,7 @@ class OrthogonalBasisFunction(OrthogonalPolynomial):
         return ortho_poly_term  # * med_term
 
     def get_weight(self, x: torch.Tensor, params: dict):
-        return torch.sqrt(self.mex(x, self.betas, self.gammas))
-
-    # def get_parameters(self):
-    # return self.med.moment_net.layers[-1].weight
+        return torch.sqrt(self.med(x, self.betas, self.gammas))
 
 
 def get_measure_from_poly(
