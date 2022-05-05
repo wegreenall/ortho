@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from ortho.measure import MaximalEntropyDensity
 
 # from time import sleep
+torch.set_default_tensor_type(torch.DoubleTensor)
 
 """
 contains classes for construction of orthogonal polynomials.
@@ -82,6 +83,7 @@ class OrthogonalPolynomial:
         is positive definite.
         """
         # assert gammas[0] == 1, "Please make sure gammas[0] = 1"
+        # print("In set_gammas in OrthogonalPolynomial, and γ_0 = ", gammas[0])
         assert (gammas >= 0).all(), "Please make sure gammas > 0"
         self.gammas = gammas
 
@@ -93,13 +95,13 @@ class OrthogonalPolynomial:
 
 
 class OrthonormalPolynomial(OrthogonalPolynomial):
-    def set_gammas(self, gammas):
-        super().set_gammas(gammas)
+    # def set_gammas(self, gammas):
+    # super().set_gammas(gammas)
 
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         result = super().__call__(x, deg, params)
         normalising_coefficient = torch.prod(self.gammas[1:deg])
-        return result / normalising_coefficient
+        return result / torch.sqrt(normalising_coefficient)
 
 
 class OrthogonalBasisFunction(OrthogonalPolynomial):
@@ -121,16 +123,13 @@ class OrthogonalBasisFunction(OrthogonalPolynomial):
         builds the weight function component.
         """
         ortho_poly_term = super().__call__(x, deg, params)
-        med_term = torch.sqrt(self.med(x))
+        # med_term = torch.sqrt(self.med(x))
         # layer = self.med.moment_net.layers[-1]
         # print(layer.weight)
         return ortho_poly_term  # * med_term
 
     def get_weight(self, x: torch.Tensor, params: dict):
-        return torch.sqrt(self.mex(x, self.betas, self.gammas))
-
-    # def get_parameters(self):
-    # return self.med.moment_net.layers[-1].weight
+        return torch.sqrt(self.med(x, self.betas, self.gammas))
 
 
 def get_measure_from_poly(
@@ -196,7 +195,49 @@ class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
         super().__init__(order, betas, gammas)
 
 
-def get_poly_from_moments(moments: list) -> SymmetricOrthogonalPolynomial:
+def get_moments_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
+    """
+    Returns a sequence of moments calculated from a sample.
+    The odd-ordered moments are set to 0 to handle the fact that we are
+    calculating a symmetric orthogonal polynomial (we only have one equation
+    for each parameter that we want to solve for.
+    """
+    powers_of_sample = sample.repeat(2 * order + 2, 1).t() ** torch.linspace(
+        0, 2 * order + 1, 2 * order + 2
+    )
+    estimated_moments = torch.mean(powers_of_sample, dim=0)
+
+    # build moments
+    moments = torch.zeros(2 * order + 2)
+    moments[0] = 1
+    for i in range(1, 2 * order + 2):
+        if i % 2 == 0:  # i.e. even
+            moments[i] = estimated_moments[i]
+    # breakpoint()
+    return moments
+
+
+def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+    """
+    dets = torch.zeros(order + 2)
+    dets[0] = dets[1] = 1.0
+    gammas = torch.zeros(order)
+    for i in range(order):
+        hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)
+        dets[i + 2] = torch.linalg.det(hankel_matrix)
+    gammas = dets[:-2] * dets[2:] / (dets[1:-1] ** 2)
+    return gammas
+
+
+def get_poly_from_moments(
+    moments: torch.Tensor,
+    order: int,
+) -> SymmetricOrthogonalPolynomial:
     """
     Accepts a list of moment values and produces from it a
     SymmetricOrthogonalPolynomial.
@@ -208,13 +249,41 @@ def get_poly_from_moments(moments: list) -> SymmetricOrthogonalPolynomial:
     symmetricality, we can build a sequence of symmetric orthogonal polynomials
     from a given set of moments.
     """
-    order = len(moments)
     gammas = torch.zeros(order)
 
     # to construct the polynomial from the sequnce of moments, utilise the
     # sequence of equations:
+    gammas = get_gammas_from_moments(moments, order)
 
     return SymmetricOrthogonalPolynomial(order, gammas)
+
+
+def get_gammas_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
+    """
+    Composes get_gammas_from_moments and get_moments_from_sample to
+    produce the gammas from a sample. This just allows for simple
+    calls to individual functions to construct the necessary
+    component in any given situation.
+    """
+    return get_gammas_from_moments(
+        get_moments_from_sample(sample, order), order
+    )
+
+
+def get_poly_from_sample(
+    sample: torch.Tensor, order: int
+) -> SymmetricOrthogonalPolynomial:
+    """
+    Returns a SymmetricOrthogonalPolynomial calculated by:
+         - taking the moments from the sample, with odd moments set to 0;
+         - constructing from these the gammas that correspond to the
+           SymmetricOrthogonalPolynomial recursion
+         - generating the SymmetricOrthogonalPolynomial from these gammas.
+    Hence we have a composition of the three functions:
+          get_moments_from_sample -> get_poly_from_moments
+    """
+    moments = get_moments_from_sample(sample, order)
+    return get_poly_from_moments(moments, order)
 
 
 class OrthogonalPolynomialSeries:

@@ -2,6 +2,9 @@ import torch
 from torch import nn
 from torch.nn import Module
 import torch.distributions as D
+from typing import Tuple
+import math
+from ortho.roots import get_roots, get_polynomial_max, integrate_function
 
 # from ortho.orthopoly import OrthogonalPolynomial
 # from ortho.inverse_laplace import build_inverse_laplace_from_moments
@@ -24,73 +27,257 @@ class MaximalEntropyDensity:
     """
 
     def __init__(self, order: int, betas: torch.Tensor, gammas: torch.Tensor):
-        # self.moment_net = moment_net
-        self.order = order
-        assert (
-            betas.shape[0] == 2 * order + 1
-        ), "Please provide at least 2 * order + 1 values for beta"
-        assert (
-            gammas.shape[0] == 2 * order + 1
-        ), "Please provide at least 2 * order + 1 values for gamma"
+        assert betas.shape[0] == 2 * order, "Please provide 2 * order betas"
+        assert gammas.shape[0] == 2 * order, "Please provide 2 * order gammas"
         self.betas = betas
         self.gammas = gammas
-        pass
+        self.order = order
+        self.lambdas = self._get_lambdas()
+        self.normalising_constant = self._get_log_normalising_coefficient()
+        # self.log_normalising_coefficient = self._get_log_normalising_coefficient
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        # xsigns = torch.sign(x)
-        if len(x.shape) > 1:
-            x = x.squeeze()
+        """
+        Evaluates the maximal entropy density at input x.
 
-        poly_term = self.get_poly_term(x)
-        lambdas = self._prep_lambdas()
+        This is e^(-m'M{^-1}x), where x signifies the
+        matrix of x evaluated at powers {0, 1, ..., m}.
 
-        return torch.exp(-torch.einsum("ij, j -> i", poly_term, lambdas))
-
-    def get_poly_term(self, x):
-        z = x.repeat(self.order + 1, 1)
-        powers_of_x = torch.pow(
-            z.t(), torch.linspace(0, self.order, self.order + 1)
+            -> μ, Μ    => _get_moments()
+            -> δ = μ'Μ => _get_lambdas()
+            -> x       => _get_poly_term()
+            -> δ'x     => _unnormalised_log_weight_function()
+        """
+        # lambdas = self._get_lambdas()
+        unnormed_log_weight = self._unnormalised_log_weight_function(x)
+        log_normalising_coefficient = self.normalising_constant
+        if (unnormed_log_weight == math.inf).any():
+            print("Inf in polyterm...")
+            breakpoint()
+        weight_function = torch.exp(
+            -unnormed_log_weight + log_normalising_coefficient
         )
+        if (weight_function == math.inf).any() or (
+            weight_function == -math.inf
+        ).any():
+            print("\nInf in result(exp(-polytermwithlambdas)...\n")
+            print(
+                "Masking infs with 0. This is not the right thing to do\
+                but it is what I can think of right now"
+            )
+            breakpoint()
+        result = weight_function
+        return result
+
+    def _unnormalised_log_weight_function(
+        self, x: torch.Tensor
+    ) -> torch.Tensor:
+        poly_term = self._get_poly_term(x)
+        polytermwithlambdas = torch.einsum("ij,j->i", poly_term, self.lambdas)
+        if (polytermwithlambdas > 700).any():
+            print("polytermwithlambdas > 700")
+            # breakpoint()
+
+        return polytermwithlambdas
+
+    def _get_poly_term(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Returns a polynomial with the corresponding lagrange multiplier
+        coefficients; at the input x.
+        """
+        z = x.squeeze().repeat(self.order, 1)
+        # breakpoint()
+        powers_of_x = torch.pow(
+            z.t(), torch.linspace(1, self.order, self.order)
+        )
+
         return powers_of_x
 
-    def _prep_lambdas(self):
-        moments = self.moment_generator()
-        moment_vector = moments[: self.order + 1]
-        moment_matrix = moments.unfold(0, self.order + 1, 1)  # moment matrix
+    def _get_moments(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Acquires the moments, starting from the first (not the 0-th, trivially
+        equal to 1) for the given betas and gammas, via the Catalan
+        matrix formulation due to Aigner (2006).
 
-        system_matrix = torch.einsum(
-            "i, j, ij -> ij",
-            1 / torch.linspace(2, self.order + 1, self.order + 1),
-            torch.linspace(1, self.order + 1, self.order + 1),
-            moment_matrix,
-        )  # ratio matrix
+        Returns:
+            - the moment vector m containing the moments up to the order + 1
+            - the Hankel moment matrix containing all moments up to
+              2 * order + 2
+        """
+        cat_matrix = torch.zeros(2 * self.order + 2, 2 * self.order + 2)
+        cat_matrix[0, 1] = 1
 
-        # print("About to get the lambdas!")
         # breakpoint()
-        try:
-            lambdas = torch.linalg.solve(system_matrix, moment_vector)
-        except RuntimeError:
-            print("The system_matrix is singular!")
-            breakpoint()
-        # print(lambdas)
-        # breakpoint()
-        return lambdas
-
-    def moment_generator(self):
-        order = len(self.betas)
-        ones = torch.ones(order)
-        cat_matrix = torch.zeros(order + 2, order + 2)
-        cat_matrix[0, 0] = 1
-        # jordan = jordan_matrix(betas, gammas)
-        for n in range(1, order):
-            # breakpoint()
+        """
+        The following loop builds out the Catalan matrix. it does this
+        inside a padded matrix so that the recursion is simple for the edge cases
+        (by having terms "outside" the matrix be 0).
+        """
+        for n in range(1, 2 * self.order + 1):
             cat_matrix[n, 1:-1] = (
-                cat_matrix[n - 1, :-2].clone() * ones
+                cat_matrix[n - 1, :-2].clone()
                 + cat_matrix[n - 1, 1:-1].clone() * self.betas
                 + cat_matrix[n - 1, 2:].clone() * self.gammas
             )
+        """
+        We construct the moments up to 2*self.order and then use unfold
+        to loop the same vector round to make the Hankel matrix.
+        """
+        moment_vector = cat_matrix[1:-1, 1]  # contains up to 2m
+        moment_matrix = moment_vector.unfold(0, self.order, 1)[
+            1:, :
+        ]  # moment matrix
+        return (
+            moment_vector[: self.order],
+            moment_matrix,
+        )
 
-        return cat_matrix[1:-1, 1]
+    def _get_lambdas(self) -> torch.Tensor:
+        """
+        Solves the system m = λM to acquire the Lagrangian multipliers for the
+        maximal entropy density given the sequence of moments.
+
+        Given that the Lagrangian multiplier signs do not matter,
+        and to ensure "good" behaviour of the weight function, we can
+        take the Lagrange multipliers to be the negative of the absolute
+        values for the result here - this will allow us to ensure the "right"
+        behaviour of the weight function whilst imposing the constraints.
+        """
+        # get the moments vector
+        moment_vector, moment_matrix = self._get_moments()
+
+        # ratios_matrix R_{ij} = j/(i+1)
+        ratios_matrix = torch.einsum(
+            "i, j -> ij",
+            1 / torch.linspace(2, self.order + 1, self.order),
+            torch.linspace(1, self.order, self.order),
+        )
+
+        system_matrix = ratios_matrix * moment_matrix
+        lambdas = torch.linalg.solve(system_matrix, moment_vector)
+        assert torch.allclose(system_matrix @ lambdas, moment_vector)
+        return lambdas
+
+    def _get_log_normalising_coefficient(
+        self, sampling_size=10000
+    ) -> torch.Tensor:
+        """
+        Returns the normalising coefficient under the given sequence.
+        It does this by first calculating the maximiser of the weight
+        function, and then approximating the integral via Laplace's method.
+        The fact that the density is the maximum
+        entropy and goes to zero means this calculation should be
+        relatively accurate.
+        """
+        # get the function maximum
+        weight_maximiser = self._get_unnormalised_maximiser()
+        # breakpoint()
+        integral = integrate_function(
+            lambda x: torch.exp(-self._unnormalised_log_weight_function(x)),
+            torch.Tensor([6.0]),
+            weight_maximiser,
+        )
+        return -torch.log(integral)
+
+    def _get_unnormalised_maximiser(self):
+        """
+        Returns the maximiser of this function when not normalised -
+        this allows for simple calculation of the normalising constant
+        because to do so we need to build the integral of the function.
+        """
+        return torch.exp(get_polynomial_max(self.lambdas, self.order))
+
+    def set_betas(self, betas):
+        self.betas = betas
+
+    def set_gammas(self, gammas):
+        # print("In set_gammas in MaximalEntropyDensity, and γ_0 = ", gammas[0])
+        assert (gammas > 0).all(), "Please ensure gammas are non-negative."
+        self.gammas = gammas
+
+
+# class MaximalEntropyDensity:
+# """
+# For a given sequence of moments {1, μ_1, μ_2, ...),
+# such that the Hankel determinant is positive (i.e. they come from an OPS
+# as given by Favard's theorem with  γ_n > 0 for n >= 1.
+
+# To get this, we take e^(-m'M^{_1}x).
+# where m+1 is the vector of moments 0 to k, and M is the Hankel matrix of
+# moments from 0 to 2k; x is the polynomial up to order k.
+# i.e. {1, x, ..., x^k}
+
+# The moment_net output should be equal in size to 2 * order.
+# """
+
+# def __init__(self, order: int, betas: torch.Tensor, gammas: torch.Tensor):
+# # self.moment_net = moment_net
+# self.order = order
+# assert (
+# betas.shape[0] == 2 * order + 1
+# ), "Please provide at least 2 * order + 1 values for beta"
+# assert (
+# gammas.shape[0] == 2 * order + 1
+# ), "Please provide at least 2 * order + 1 values for gamma"
+# self.betas = betas
+# self.gammas = gammas
+# pass
+
+# def __call__(self, x: torch.Tensor) -> torch.Tensor:
+# # xsigns = torch.sign(x)
+# if len(x.shape) > 1:
+# x = x.squeeze()
+
+# poly_term = self.get_poly_term(x)
+# lambdas = self._prep_lambdas()
+
+# return torch.exp(-torch.einsum("ij, j -> i", poly_term, lambdas))
+
+# def get_poly_term(self, x):
+# z = x.repeat(self.order + 1, 1)
+# powers_of_x = torch.pow(
+# z.t(), torch.linspace(0, self.order, self.order + 1)
+# )
+# return powers_of_x
+
+# def _prep_lambdas(self):
+# moments = self.moment_generator()
+# moment_vector = moments[: self.order + 1]
+# moment_matrix = moments.unfold(0, self.order + 1, 1)  # moment matrix
+
+# system_matrix = torch.einsum(
+# "i, j, ij -> ij",
+# 1 / torch.linspace(2, self.order + 1, self.order + 1),
+# torch.linspace(1, self.order + 1, self.order + 1),
+# moment_matrix,
+# )  # ratio matrix
+
+# # print("About to get the lambdas!")
+# # breakpoint()
+# try:
+# lambdas = torch.linalg.solve(system_matrix, moment_vector)
+# except RuntimeError:
+# print("The system_matrix is singular!")
+# breakpoint()
+# # print(lambdas)
+# # breakpoint()
+# return lambdas
+
+# def moment_generator(self):
+# order = len(self.betas)
+# ones = torch.ones(order)
+# cat_matrix = torch.zeros(order + 2, order + 2)
+# cat_matrix[0, 0] = 1
+# # jordan = jordan_matrix(betas, gammas)
+# for n in range(1, order):
+# # breakpoint()
+# cat_matrix[n, 1:-1] = (
+# cat_matrix[n - 1, :-2].clone() * ones
+# + cat_matrix[n - 1, 1:-1].clone() * self.betas
+# + cat_matrix[n - 1, 2:].clone() * self.gammas
+# )
+
+# return cat_matrix[1:-1, 1]
 
 
 def jordan_matrix(s, t):
@@ -351,11 +538,11 @@ if __name__ == "__main__":
     order = 30
 
     test_cat_net = False
-    test_moment_gen = True
+    test_moment_gen = False
+    test_moment_gen_2 = True
     # build random betas and gammas
     if test_cat_net:
         for i in range(1, 10):
-            start_point = 5
             betas = 0 * torch.ones(2 * order + 1)
             # betas = D.Normal(0.0, 0.2).sample([2 * order + 1])
             # gammas = i * torch.ones(2 * order + 1)
@@ -367,13 +554,13 @@ if __name__ == "__main__":
 
             my_net = CatNet(order, betas, gammas)
             my_measure = MaximalEntropyDensity(my_net, order)
-            fineness = 2000
             x_axis = torch.linspace(-start_point, start_point, fineness)
             measure_values = my_measure(x_axis)
             breakpoint()
             print("About to plot the measure density")
             plt.plot(x_axis.detach().numpy(), measure_values.detach().numpy())
         plt.show()
+
     if test_moment_gen:
         betas = 0 * torch.ones(order)
         gammas = 1 * torch.ones(order)
@@ -381,6 +568,18 @@ if __name__ == "__main__":
         catalans = MomentGenerator()
         result = catalans(betas, gammas)
         print(result)
+
+    if test_moment_gen_2:
+        betas = 0 * torch.ones(2 * order)
+        gammas = 1 * torch.ones(2 * order)
+
+        med = MaximalEntropyDensity(order, betas, gammas)
+        x = torch.linspace(-5, 5, 1000)
+        vals = med(x)
+        plt.plot(x, vals)
+        plt.show()
+        # moments = med._get_moments()
+        # print(result)
     # poly = OrthogonalPolynomial(order, betas, gammas)
     # mus = get_moments_from_poly(poly)
     # print("moments from a random polynomial linear moment functional:", mus)

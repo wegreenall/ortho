@@ -1,6 +1,6 @@
 # basis_functions.py
 import math
-from ortho.orthopoly import OrthonormalPolynomial
+from ortho.orthopoly import OrthogonalPolynomial
 
 # import matplotlib
 # matplotlib.use("Qt5Agg")
@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 
 # from framework import special, utils
-from polynomials import chebyshev_first, chebyshev_second
+from ortho.polynomials import chebyshev_first, chebyshev_second
 from typing import Callable
 
 from ortho.special import hermite_function
@@ -34,6 +34,8 @@ necessary to hand-tune every time
 Return value must be a torch.Tensor of dimension [n] only;
 not [n, 1] as is the inputs vector - this reflects explicitly that the output
 would be 1-d (2-d inputs would be of shape [n,2]). The result of this is that
+multi-dimensional problems require the construction of the tensor product 
+formulation of an orthonormal basis.
 """
 
 
@@ -104,15 +106,15 @@ class Basis:
 class OrthonormalBasis(Basis):
     def __init__(
         self,
-        basis_function: OrthonormalPolynomial,
+        basis_function: OrthogonalPolynomial,
         weight_function: Callable,
         dimension: int,
         order: int,
         params: dict = None,
     ):
-        assert (
-            type(basis_function) == OrthonormalPolynomial
-        ), "the basis function should be of type OrthonormalPolynomial"
+        assert isinstance(
+            basis_function, OrthogonalPolynomial
+        ), "the basis function should be of type OrthogonalPolynomial"
         super().__init__(basis_function, dimension, order, params)
         self.weight_function = weight_function
 
@@ -123,9 +125,19 @@ class OrthonormalBasis(Basis):
         can be applied "outside" the tensor of orthogonal polynomials,
         so it is feasible to do this separately and therefore faster.
         """
+        # epsilon = 1e-10
         ortho_poly_basis = super().__call__(x)
         result = torch.sqrt(self.weight_function(x))
+        # result = torch.ones(x.shape)
         return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
+
+    def set_gammas(self, gammas):
+        """
+        Updates the gammas on the basis function and the
+        weight function.
+        """
+        self.basis_function.set_gammas(gammas)
+        self.weight_function.set_gammas(gammas)
 
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):

@@ -20,6 +20,7 @@ class TestInverseLaplaceL(unittest.TestCase):
         self.assertTrue((torch.abs(mgf_vals - exp_vals) < self.eps).all())
         pass
 
+    @unittest.skip("Too long!")
     def test_inverse_laplace(self):
         # test the sin function inverse laplace transform
         t = 2
