@@ -120,15 +120,14 @@ class OrthonormalBasis(Basis):
 
     def __call__(self, x):
         """
-        Returns the whole basis evaluated at an input. The difference for an
-        orthonormal basis is that the weight function and normalising constant
+        Returns the whole basis evaluated at an input. The difference between an
+        orthonormal basis and a standard set of polynomials is that the weight
+        function and normalising constant
         can be applied "outside" the tensor of orthogonal polynomials,
-        so it is feasible to do this separately and therefore faster.
+        so it is feasible to do this separately (and therefore faster).
         """
-        # epsilon = 1e-10
         ortho_poly_basis = super().__call__(x)
         result = torch.sqrt(self.weight_function(x))
-        # result = torch.ones(x.shape)
         return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
 
     def set_gammas(self, gammas):

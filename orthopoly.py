@@ -39,7 +39,6 @@ class OrthogonalPolynomial:
             )
         self.set_betas(betas)
         self.set_gammas(gammas)
-
         self.leading = leading
         return
 
@@ -95,8 +94,11 @@ class OrthogonalPolynomial:
 
 
 class OrthonormalPolynomial(OrthogonalPolynomial):
-    # def set_gammas(self, gammas):
-    # super().set_gammas(gammas)
+    """
+    Subclasses the OrthogonalPolynomial to allow for normalisation.
+    The normalising constant for a given orthonormal basis is the reciprocal of
+    the product of the gammas from the Favard recursion.
+    """
 
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         result = super().__call__(x, deg, params)
@@ -182,6 +184,20 @@ def get_measure_from_poly(
 
 
 class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
+    def __init__(self, order, gammas):
+        """
+        If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
+        then there exist coefficients γ_n != 0 for n>=1, s.t.
+                P_{n+1} = xP_n(x) - γ_nP_{n-1}
+
+        with initial conditions P_0(x) = 1 and P_1(x) = x
+        This is equivalent to a polynomial sequence with β_n = 0 for each n
+        """
+        betas = torch.zeros(order)
+        super().__init__(order, betas, gammas)
+
+
+class SymmetricOrthonormalPolynomial(OrthonormalPolynomial):
     def __init__(self, order, gammas):
         """
         If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
