@@ -34,6 +34,8 @@ necessary to hand-tune every time
 Return value must be a torch.Tensor of dimension [n] only;
 not [n, 1] as is the inputs vector - this reflects explicitly that the output
 would be 1-d (2-d inputs would be of shape [n,2]). The result of this is that
+multi-dimensional problems require the construction of the tensor product 
+formulation of an orthonormal basis.
 """
 
 
@@ -125,14 +127,17 @@ class OrthonormalBasis(Basis):
         """
         # epsilon = 1e-10
         ortho_poly_basis = super().__call__(x)
-        result = torch.sqrt(
-            self.weight_function(x)
-        )  # there is a problem in here...
-        # result = self.weight_function(x)
-        # print(result)
-        # result += epsilon
+        result = torch.sqrt(self.weight_function(x))
         # result = torch.ones(x.shape)
         return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
+
+    def set_gammas(self, gammas):
+        """
+        Updates the gammas on the basis function and the
+        weight function.
+        """
+        self.basis_function.set_gammas(gammas)
+        self.weight_function.set_gammas(gammas)
 
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):

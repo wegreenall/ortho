@@ -1,57 +1,119 @@
 import torch
 import torch.distributions as D
-from ortho.orthopoly import OrthogonalPolynomial
+from ortho.orthopoly import (
+    OrthogonalPolynomial,
+    get_gammas_from_moments,
+    get_poly_from_moments,
+    get_poly_from_sample,
+    get_moments_from_sample,
+)
+import math
 
 # from ortho.measure import coeffics_list
 import unittest
 import matplotlib.pyplot as plt
 
+torch.set_default_tensor_type(torch.DoubleTensor)
 
-# class TestL(unittest.TestCase):
-# def setUp(self):
-# self.order = 3
 
-# # build random betas and gammas
+class TestPolyFromMoments(unittest.TestCase):
+    def setUp(self):
+        self.order = 8
+        self.catalans = torch.Tensor(
+            [
+                1,
+                0,
+                1,
+                0,
+                2,
+                0,
+                5,
+                0,
+                14,
+                0,
+                42,
+                0,
+                132,
+                0,
+                429,
+                0,
+                1430,
+                0,
+                4862,
+                0,
+                16796,
+                0,
+                58786,
+                0,
+                208012,
+                0,
+                742900,
+                0,
+                2674440,
+                0,
+                9694845,
+                0,
+                35357670,
+                0,
+                129644790,
+                0,
+                477638700,
+                0,
+                1767263190,
+                0,
+                6564120420,
+                0,
+            ]
+        )
+        self.chebyshev_polynomials_basic = [
+            lambda x: torch.ones(x.shape),
+            lambda x: x,
+            lambda x: x ** 2 - 1,
+            lambda x: x ** 3 - 2 * x,
+            lambda x: x ** 4 - 3 * x ** 2 + 1,
+            lambda x: x ** 5 - 4 * x ** 3 + 3 * x,
+        ]
+        self.moments_2 = torch.Tensor(
+            [1, 0, 1, 0, 3, 0, 15, 0, 105, 0, 945]
+        ) * (math.sqrt(3) ** torch.Tensor(list(range(11))))
 
-# # self.betas = torch.ones(self.order)
-# # self.gammas = torch.ones(self.order)
-# self.betas = D.Exponential(1.0).sample([self.order])
-# self.gammas = D.Exponential(1.0).sample([self.order])
-# self.gammas[0] = 1
+    def test_moments_to_gammas(self):
+        moments = self.catalans[: 2 * self.order + 2]
+        gammas = get_gammas_from_moments(moments, self.order)
+        self.assertTrue(torch.allclose(gammas, torch.ones(gammas.shape)))
 
-# self.poly = OrthogonalPolynomial(self.order, self.betas, self.gammas)
+    def test_moments_to_gammas(self):
+        gammas = get_gammas_from_moments(self.moments_2, 6)
+        self.assertTrue(
+            torch.allclose(
+                gammas, torch.Tensor([1.0, 3.0, 6.0, 9.0, 12.0, 15.0])
+            )
+        )
 
-# self.test_coeffics = [
-# torch.Tensor([1.0]),  # for μ_0
-# torch.Tensor([-self.betas[0], 1.0]),  # for μ_1
-# torch.Tensor([-self.gammas[1], -self.betas[0], 1.0]),  # for μ_2
-# torch.Tensor(  # for μ_3
-# [
-# 0,
-# -(self.gammas[1] - self.betas[0] * self.betas[1]),
-# -(self.betas[0] + self.betas[1]),
-# 1.0,
-# ]
-# ),
-# ]
+    def test_poly_from_moments(self):
+        moments = self.catalans[: 2 * self.order + 2]
+        poly = get_poly_from_moments(moments, self.order)
+        x = torch.linspace(-1, 1, 1000)
+        params = dict()
+        for i in range(6):
+            self.assertTrue(
+                torch.allclose(
+                    poly(x, i, params), self.chebyshev_polynomials_basic[i](x)
+                )
+            )
 
-# def test_L(self):
-# # tests for the correct construction of the coefficients for the
-# # generation of the moments of the linear function w.r.t a given
-# # orthogonal polynomial system is orthogonal
-# for order in range(self.order):
-# with self.subTest(i=order):
-# coeffics = coeffics_list(order)
-# loc = (0, order)
-# value = 1
-# L(loc, value, coeffics, self.poly)
-# final_coeffics = coeffics.get_vals()
-# # print("final_coeffics", final_coeffics)
-# # breakpoint()
-# eps = 0.000001
-# self.assertTrue(
-# (final_coeffics - self.test_coeffics[order] < eps).all()
-# )
+    @unittest.skip("")
+    def test_moments_from_sample(self):
+        pass
+
+    @unittest.skip("Not implemented yet")
+    def test_poly_from_sample(self):
+        noise_parameter = torch.Tensor([[1.0]])
+        sample_size = 100
+        input_sample = D.Normal(0.0, 1.0).sample([sample_size])
+        output_sample = test_function(input_sample) + D.Normal(
+            0.0, noise_parameter.squeeze()
+        ).sample([sample_size])
 
 
 class TestOrthogonalPolynomials(unittest.TestCase):
@@ -110,16 +172,9 @@ class TestOrthogonalPolynomials(unittest.TestCase):
         func_means = torch.zeros(n)
         for i in range(0, n):
             break
-            # duh, this is always the integral:
-            # func_mean = torch.mean(func_sample) * (self.ub - self.lb)
-            # func_means[i] = func_mean
-
-        # print(torch.mean(func_means))
-        # breakpoint()
         self.assertTrue(
             (torch.abs(torch.mean(func_means) - 1) < 0.00001).all()
         )
-        # print("integral of square basis function: ", func_mean)
 
     def test_correctness(self):
         order = 5
@@ -129,9 +184,6 @@ class TestOrthogonalPolynomials(unittest.TestCase):
         poly = OrthogonalPolynomial(order, betas, gammas)
         for i in range(order + 1):
             outputs = poly(self.inputs, i, dict())
-            # plt.plot(self.inputs, outputs)
-            # plt.plot(self.inputs, self.prob_polynomials[i](self.inputs))
-            # plt.show()
             self.assertTrue(
                 (
                     torch.abs(outputs - self.prob_polynomials[i](self.inputs))
