@@ -56,7 +56,6 @@ class MaximalEntropyDensity:
             breakpoint()
         weight_function = torch.exp(
             -unnormed_log_weight + log_normalising_coefficient
->>>>>>> normalising_coefficient
         )
         if (weight_function == math.inf).any() or (
             weight_function == -math.inf
@@ -108,7 +107,7 @@ class MaximalEntropyDensity:
         cat_matrix = torch.zeros(2 * self.order + 2, 2 * self.order + 2)
         cat_matrix[0, 1] = 1
 
-           # breakpoint()
+        # breakpoint()
         """
         The following loop builds out the Catalan matrix. it does this
         inside a padded matrix so that the recursion is simple for the edge cases
