@@ -253,7 +253,7 @@ def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
 def get_poly_from_moments(
     moments: torch.Tensor,
     order: int,
-) -> SymmetricOrthogonalPolynomial:
+) -> SymmetricOrthonormalPolynomial:
     """
     Accepts a list of moment values and produces from it a
     SymmetricOrthogonalPolynomial.
@@ -271,7 +271,7 @@ def get_poly_from_moments(
     # sequence of equations:
     gammas = get_gammas_from_moments(moments, order)
 
-    return SymmetricOrthogonalPolynomial(order, gammas)
+    return SymmetricOrthonormalPolynomial(order, gammas)
 
 
 def get_gammas_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
