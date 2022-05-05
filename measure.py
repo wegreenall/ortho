@@ -4,7 +4,7 @@ from torch.nn import Module
 import torch.distributions as D
 from typing import Tuple
 import math
-from ortho.roots import get_roots, get_polynomial_max
+from ortho.roots import get_roots, get_polynomial_max, integrate_function
 
 # from ortho.orthopoly import OrthogonalPolynomial
 # from ortho.inverse_laplace import build_inverse_laplace_from_moments
@@ -32,10 +32,9 @@ class MaximalEntropyDensity:
         self.betas = betas
         self.gammas = gammas
         self.order = order
-
-        # useful for sampling
-        self.normal_dist = D.Normal(0.0, 4.0)
-        pass
+        self.lambdas = self._get_lambdas()
+        self.normalising_constant = self._get_log_normalising_coefficient()
+        # self.log_normalising_coefficient = self._get_log_normalising_coefficient
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -49,11 +48,9 @@ class MaximalEntropyDensity:
             -> x       => _get_poly_term()
             -> δ'x     => _unnormalised_log_weight_function()
         """
-        lambdas = self._get_lambdas()
-        unnormed_log_weight = self._unnormalised_log_weight_function(
-            x, lambdas
-        )
-        log_normalising_coefficient = torch.Tensor([0.0])
+        # lambdas = self._get_lambdas()
+        unnormed_log_weight = self._unnormalised_log_weight_function(x)
+        log_normalising_coefficient = self.normalising_constant
         if (unnormed_log_weight == math.inf).any():
             print("Inf in polyterm...")
             breakpoint()
@@ -73,18 +70,23 @@ class MaximalEntropyDensity:
         return result
 
     def _unnormalised_log_weight_function(
-        self, x: torch.Tensor, lambdas: torch.Tensor
+        self, x: torch.Tensor
     ) -> torch.Tensor:
         poly_term = self._get_poly_term(x)
-        polytermwithlambdas = torch.einsum("ij,j->i", poly_term, lambdas)
+        polytermwithlambdas = torch.einsum("ij,j->i", poly_term, self.lambdas)
         if (polytermwithlambdas > 700).any():
             print("polytermwithlambdas > 700")
-            breakpoint()
+            # breakpoint()
 
         return polytermwithlambdas
 
     def _get_poly_term(self, x: torch.Tensor) -> torch.Tensor:
-        z = x.repeat(self.order, 1)
+        """
+        Returns a polynomial with the corresponding lagrange multiplier
+        coefficients; at the input x.
+        """
+        z = x.squeeze().repeat(self.order, 1)
+        # breakpoint()
         powers_of_x = torch.pow(
             z.t(), torch.linspace(1, self.order, self.order)
         )
@@ -93,7 +95,8 @@ class MaximalEntropyDensity:
 
     def _get_moments(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Acquires the moments for the given betas and gammas, via the Catalan
+        Acquires the moments, starting from the first (not the 0-th, trivially
+        equal to 1) for the given betas and gammas, via the Catalan
         matrix formulation due to Aigner (2006).
 
         Returns:
@@ -115,7 +118,6 @@ class MaximalEntropyDensity:
                 + cat_matrix[n - 1, 1:-1].clone() * self.betas
                 + cat_matrix[n - 1, 2:].clone() * self.gammas
             )
-
         """
         We construct the moments up to 2*self.order and then use unfold
         to loop the same vector round to make the Hankel matrix.
@@ -142,9 +144,8 @@ class MaximalEntropyDensity:
         """
         # get the moments vector
         moment_vector, moment_matrix = self._get_moments()
-        """
-        ratios_matrix R_{ij} = j/(i+1)
-        """
+
+        # ratios_matrix R_{ij} = j/(i+1)
         ratios_matrix = torch.einsum(
             "i, j -> ij",
             1 / torch.linspace(2, self.order + 1, self.order),
@@ -157,7 +158,7 @@ class MaximalEntropyDensity:
         return lambdas
 
     def _get_log_normalising_coefficient(
-        self, lambdas: torch.Tensor, sampling_size=10000
+        self, sampling_size=10000
     ) -> torch.Tensor:
         """
         Returns the normalising coefficient under the given sequence.
@@ -167,21 +168,23 @@ class MaximalEntropyDensity:
         entropy and goes to zero means this calculation should be
         relatively accurate.
         """
-        weight_maximiser = get_polynomial_max(lambdas, self.order)
-        second_derivative_coeffics = (
-            lambdas[1:]
-            * torch.linspace(2, order, order)
-            * torch.linspace(1, order - 1, order - 1)
-            / lambdas[-1]
+        # get the function maximum
+        weight_maximiser = self._get_unnormalised_maximiser()
+        # breakpoint()
+        integral = integrate_function(
+            lambda x: torch.exp(-self._unnormalised_log_weight_function(x)),
+            torch.Tensor([6.0]),
+            weight_maximiser,
         )
-        func_term = lambdas @ weight_maximiser ** torch.linspace(
-            1, order, order
-        )  # f(x_0)
-        second_derivative_term = weight_maximiser ** torch.linspace(
-            0, order - 2, order - 1
-        )  # f''(x_0)
-        # term_1 = 0.5 * (torch.log(2 * math.pi) - second_derivative_term)
-        return term_1 + func_term
+        return -torch.log(integral)
+
+    def _get_unnormalised_maximiser(self):
+        """
+        Returns the maximiser of this function when not normalised -
+        this allows for simple calculation of the normalising constant
+        because to do so we need to build the integral of the function.
+        """
+        return torch.exp(get_polynomial_max(self.lambdas, self.order))
 
     def set_betas(self, betas):
         self.betas = betas

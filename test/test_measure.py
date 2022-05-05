@@ -1,33 +1,56 @@
 import torch
 import math
 from ortho.measure import MaximalEntropyDensity
+from ortho.roots import integrate_function
 import unittest
 
 
 class TestMaximalEntropyDensity(unittest.TestCase):
     def setUp(self):
-        # test parameters
         self.catalan_numbers = torch.Tensor(
             [
-                1.0,
-                1.0,
-                2.0,
-                5.0,
-                14.0,
-                42.0,
-                132.0,
-                429.0,
-                1430.0,
-                4862.0,
-                16796.0,
-                58786.0,
-                208012.0,
-                742900.0,
-                2674440.0,
-                9694845.0,
-                35357670.0,
-                129644790.0,
-                477638700.0,
+                1,
+                0,
+                1,
+                0,
+                2,
+                0,
+                5,
+                0,
+                14,
+                0,
+                42,
+                0,
+                132,
+                0,
+                429,
+                0,
+                1430,
+                0,
+                4862,
+                0,
+                16796,
+                0,
+                58786,
+                0,
+                208012,
+                0,
+                742900,
+                0,
+                2674440,
+                0,
+                9694845,
+                0,
+                35357670,
+                0,
+                129644790,
+                0,
+                477638700,
+                0,
+                1767263190,
+                0,
+                6564120420,
+                0,
             ]
         )
 
@@ -67,17 +90,10 @@ class TestMaximalEntropyDensity(unittest.TestCase):
         pass
 
     def test_moments(self):
-        catalan_numbers = torch.zeros(self.order + 1)
-        for i in range(self.order):
-            catalan_numbers[0] = 1.0
-            if i % 2 != 0:
-                catalan_numbers[math.floor(i + 1)] = self.catalan_numbers[
-                    math.floor(i / 2) + 1
-                ]
         moments, _ = self.med._get_moments()
-        # breakpoint()
-        self.assertTrue((moments == catalan_numbers).all())
-        pass
+        self.assertTrue(
+            torch.allclose(moments, self.catalan_numbers[1 : self.order + 1])
+        )
 
     @unittest.skip("Not yet implemented test for Hankel matrix")
     def test_hankel(self):
@@ -103,3 +119,17 @@ class TestMaximalEntropyDensity(unittest.TestCase):
     def test_call_for_nans(self):
         output = self.med(self.input_points)
         self.assertTrue((output == output).all())
+
+    def test_normalising_coefficient(self):
+        pass
+
+    def test_integral(self):
+        weight_maximiser = self.med._get_unnormalised_maximiser()
+        result = integrate_function(
+            lambda x: self.med(x),
+            torch.Tensor([6.0]),
+            weight_maximiser,
+            sample_size=10000 ** 2,
+        )
+        print(result)
+        self.assertTrue(torch.allclose(result, torch.Tensor([1.0]), 1e-02))

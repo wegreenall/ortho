@@ -52,7 +52,12 @@ def polynomial_vals(x: torch.Tensor, coeffics):
     return
 
 
-def integrate_function(integrand: Callable, end_point: torch.Tensor, func_max):
+def integrate_function(
+    integrand: Callable,
+    end_point: torch.Tensor,
+    func_max: torch.Tensor,
+    sample_size=2000 ** 2,
+):
     """
     Integrates a function using Importance sampling - this is for testing
     purposes to see if the thing makes sense.
@@ -60,7 +65,7 @@ def integrate_function(integrand: Callable, end_point: torch.Tensor, func_max):
     proposal_dist = torch.distributions.Uniform(-end_point, end_point)
     uniform_dist = torch.distributions.Uniform(0, 1)
     proposal_density = torch.Tensor([1 / (2 * end_point)])
-    sample_size = 10000 ** 2
+    # sample_size = 10000 ** 2
     M = func_max / proposal_density
 
     usample = uniform_dist.sample((sample_size,))
@@ -68,8 +73,8 @@ def integrate_function(integrand: Callable, end_point: torch.Tensor, func_max):
     candidate_sample = candidate_sample[
         usample < integrand(candidate_sample) / (M * proposal_density)
     ]
-    plt.hist(candidate_sample.numpy().flatten(), bins=100)
-    plt.show()
+    # plt.hist(candidate_sample.numpy().flatten(), bins=500)
+    # plt.show()
     return M * len(candidate_sample) / sample_size
 
 
@@ -144,15 +149,14 @@ def get_polynomial_maximiser(polynomial_coeffics: torch.Tensor, deg: int):
     """
     # first, build the coefficients for the derivative
     # deriv_coeffics = torch.zeros(polynomial_coeffics.shape)
-    deriv_roots = get_deriv_roots(coeffics, deg)
-    # print("deriv_roots:", deriv_roots)
-    # breakpoint()
-    # print("roots of derivative; i.e. stationary points:", roots)
+    deriv_roots = get_deriv_roots(polynomial_coeffics, deg - 1)
 
+    # breakpoint()
     # print("Starting to get the max root...\n")
     func_max = -math.inf
     for root in deriv_roots:
-        root_at_powers = torch.pow(root, torch.linspace(0, deg, deg + 1))
+        root_at_powers = torch.pow(root, torch.linspace(0, deg - 1, deg))
+        # breakpoint()
         test_max = polynomial_coeffics @ root_at_powers  # δ'X
         # print("root", root, "max:", test_max)
         # breakpoint()
@@ -161,7 +165,6 @@ def get_polynomial_maximiser(polynomial_coeffics: torch.Tensor, deg: int):
             # print("new max root:", root)
             max_root = root
             func_max = test_max
-    # print("Found root:", max_root, "\n")
     return max_root
 
 
@@ -189,22 +192,22 @@ def get_polynomial_max(polynomial_coeffics: torch.Tensor, deg: int):
     """
     # first, build the coefficients for the derivative
     max_root = get_polynomial_maximiser(polynomial_coeffics, deg)
-    root_at_powers = torch.pow(max_root, torch.linspace(0, deg, deg + 1))
+    root_at_powers = torch.pow(max_root, torch.linspace(0, deg - 1, deg))
     return root_at_powers @ polynomial_coeffics
 
 
 def get_second_deriv_at_root(
-    polynomial_coeffics: torch.Tensor, deg: int, root
+    polynomial_coeffics: torch.Tensor, deg: int, root: torch.Tensor
 ):
-    root_at_powers = torch.pow(root, torch.linspace(0, deg, deg + 1))
+    root_at_powers = torch.pow(root, torch.linspace(0, deg - 1, deg))
 
     # 2 get the second derivative at the maximiser
-    first_deriv_powers = torch.linspace(0, deg, deg + 1)
-    second_deriv_powers = torch.linspace(0, deg - 1, deg)
+    first_deriv_powers = torch.linspace(0, deg - 1, deg)
+    second_deriv_powers = torch.linspace(0, deg - 2, deg - 1)
     coeffics = (
         first_deriv_powers[1:] * second_deriv_powers * polynomial_coeffics[1:]
     )[1:]
-    fprimeprime_root = root_at_powers[:3] @ coeffics
+    fprimeprime_root = root_at_powers[: deg - 2] @ coeffics
     return fprimeprime_root
 
 
@@ -262,7 +265,7 @@ if __name__ == "__main__":
             -(9 + math.sqrt(41)) / 20,
         ]
     )
-    deg = 4
+    deg = 5
     test_roots = get_roots(coeffics, deg)
     # breakpoint()
     print("final roots:", test_roots)
@@ -272,8 +275,8 @@ if __name__ == "__main__":
     exp_poly_max = torch.exp(poly_max)
     print("final maximum of polynomial", poly_max)
     print("final maximum of exponentiated polynomial", exp_poly_max)
-    approx_integral = calculate_integral_laplace(coeffics, deg)
-    print("Final approximate integral:", approx_integral)
+    # approx_integral = calculate_integral_laplace(coeffics, deg)
+    # print("Final approximate integral:", approx_integral)
     fineness = 1000
     x = torch.linspace(-1.5, 1.5, fineness)
     second_deriv = get_second_deriv_at_max(coeffics, deg)
@@ -291,7 +294,7 @@ if __name__ == "__main__":
     plt.plot(x, approximating_gaussian)
     plt.plot(x, exp_of_poly(x, coeffics, deg))
     peaks = get_deriv_roots(coeffics, deg)
-    breakpoint()
+    # breakpoint()
     funcsum = torch.zeros(x.shape)
     for root in peaks:
         func1 = gaussian(
