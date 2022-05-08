@@ -73,8 +73,8 @@ def integrate_function(
     candidate_sample = candidate_sample[
         usample < integrand(candidate_sample) / (M * proposal_density)
     ]
-    # plt.hist(candidate_sample.numpy().flatten(), bins=500)
-    # plt.show()
+    plt.hist(candidate_sample.numpy().flatten(), bins=500)
+    plt.show()
     return M * len(candidate_sample) / sample_size
 
 
@@ -109,9 +109,6 @@ def get_roots(polynomial_coeffics: torch.Tensor, deg: int):
     )
     roots = torch.linalg.eig(companion).eigenvalues
     real_roots = torch.real(roots[torch.isreal(roots)])
-    # print(roots)
-    # print("real roots", real_roots)
-    # breakpoint()
     return real_roots
 
 
@@ -151,20 +148,17 @@ def get_polynomial_maximiser(polynomial_coeffics: torch.Tensor, deg: int):
     # deriv_coeffics = torch.zeros(polynomial_coeffics.shape)
     deriv_roots = get_deriv_roots(polynomial_coeffics, deg - 1)
 
-    # breakpoint()
-    # print("Starting to get the max root...\n")
     func_max = -math.inf
-    for root in deriv_roots:
-        root_at_powers = torch.pow(root, torch.linspace(0, deg - 1, deg))
-        # breakpoint()
-        test_max = polynomial_coeffics @ root_at_powers  # δ'X
-        # print("root", root, "max:", test_max)
-        # breakpoint()
-        if func_max < test_max:
-            # print("func_max is:", func_max)
-            # print("new max root:", root)
-            max_root = root
-            func_max = test_max
+    if len(deriv_roots) > 0:
+        for root in deriv_roots:
+            root_at_powers = torch.pow(root, torch.linspace(0, deg - 1, deg))
+            test_max = polynomial_coeffics @ root_at_powers  # δ'X
+            if func_max < test_max:
+                max_root = root
+                func_max = test_max
+    else:
+        print("No roots!")
+        breakpoint()
     return max_root
 
 

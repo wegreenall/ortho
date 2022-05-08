@@ -50,12 +50,12 @@ class MaximalEntropyDensity:
         """
         # lambdas = self._get_lambdas()
         unnormed_log_weight = self._unnormalised_log_weight_function(x)
-        log_normalising_coefficient = self.normalising_constant
+        normalising_coefficient = self.normalising_constant
         if (unnormed_log_weight == math.inf).any():
             print("Inf in polyterm...")
             breakpoint()
-        weight_function = torch.exp(
-            -unnormed_log_weight + log_normalising_coefficient
+        weight_function = normalising_coefficient * torch.exp(
+            -unnormed_log_weight
         )
         if (weight_function == math.inf).any() or (
             weight_function == -math.inf
@@ -171,13 +171,15 @@ class MaximalEntropyDensity:
         """
         # get the function maximum
         weight_maximiser = self._get_unnormalised_maximiser()
-        # breakpoint()
         integral = integrate_function(
             lambda x: torch.exp(-self._unnormalised_log_weight_function(x)),
-            torch.Tensor([6.0]),
+            torch.Tensor([8.0]),
             weight_maximiser,
         )
-        return -torch.log(integral)
+        if -torch.log(integral) == math.inf:
+            breakpoint()
+
+        return 1 / integral
 
     def _get_unnormalised_maximiser(self):
         """
@@ -185,7 +187,13 @@ class MaximalEntropyDensity:
         this allows for simple calculation of the normalising constant
         because to do so we need to build the integral of the function.
         """
-        return torch.exp(get_polynomial_max(self.lambdas, self.order))
+        # breakpoint()
+        coeffics = -torch.cat((torch.Tensor([0.0]), self.lambdas))
+        print(get_roots(coeffics, self.order))
+        maxxer = get_polynomial_max(coeffics, self.order + 1)
+        print("Maxxer is:", maxxer)
+        breakpoint()
+        return torch.exp(maxxer)
 
     def set_betas(self, betas):
         self.betas = betas

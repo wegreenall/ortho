@@ -1,7 +1,7 @@
 import torch
 import torch.distributions as D
-from ortho.orthopoly import (
-    OrthogonalPolynomial,
+from ortho.orthopoly import OrthogonalPolynomial
+from ortho.builders import (
     get_gammas_from_moments,
     get_poly_from_moments,
     get_poly_from_sample,

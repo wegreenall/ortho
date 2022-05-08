@@ -58,7 +58,7 @@ class Basis:
                 Expected to have signature:
                                 basis_function(x: torch.Tensor,
                                                deg: int,
-                                               params: dict)
+                                               params: dict) -> torch.Tensor
 
 
         """
@@ -241,7 +241,7 @@ def smooth_exponential_eigenvalues(deg: int, params: dict):
         eigenvalue = torch.prod(lamda_d, dim=1)
         eigenvalues[i - 1] = eigenvalue
     # breakpoint()
-    breakpoint()
+    # breakpoint()
     return eigenvalues
 
 
@@ -317,8 +317,6 @@ def smooth_exponential_eigenvalues_fasshauer(deg: int, params: dict):
     # construct the vector
     exponents = torch.linspace(0, deg - 1, deg)
     eigenvalues = left_term * torch.pow(right_term, exponents)
-    # breakpoint()
-    # breakpoint()
     return eigenvalues.squeeze()
 
 
