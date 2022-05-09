@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 
 """
-This calculates the roots for a polynomial for given coefficients
-by calculating the eigenvalues of the companion matrix.
+This file containes functions for calculating the roots; maxima; etc.
+for a polynomial for given coefficients, etc.
 """
 
 
@@ -65,16 +65,17 @@ def integrate_function(
     proposal_dist = torch.distributions.Uniform(-end_point, end_point)
     uniform_dist = torch.distributions.Uniform(0, 1)
     proposal_density = torch.Tensor([1 / (2 * end_point)])
-    # sample_size = 10000 ** 2
     M = func_max / proposal_density
 
     usample = uniform_dist.sample((sample_size,))
     candidate_sample = proposal_dist.sample((sample_size,))
-    candidate_sample = candidate_sample[
-        usample < integrand(candidate_sample) / (M * proposal_density)
-    ]
-    plt.hist(candidate_sample.numpy().flatten(), bins=500)
-    plt.show()
+    relevant_locs = usample < integrand(candidate_sample) / (
+        M * proposal_density
+    )
+    # breakpoint()
+    candidate_sample = candidate_sample[relevant_locs]
+    # plt.hist(candidate_sample.numpy().flatten(), bins=500)
+    # plt.show()
     return M * len(candidate_sample) / sample_size
 
 
