@@ -16,11 +16,10 @@ def gaussian(
     """
     calculates the Gaussian at the peak given by root
     """
-    x_shaped = root.repeat(deg + 1, 1).t()
-    x_at_powers = x_shaped ** torch.linspace(0, deg, deg + 1)
+    x_shaped = root.repeat(deg, 1).t()
+    x_at_powers = x_shaped ** torch.linspace(0, deg - 1, deg)
 
     poly_max = torch.einsum("ij, j->i", x_at_powers, polynomial_coeffics)
-    breakpoint()
 
     if second_derivative <= 0:
         gaussian = torch.exp(
@@ -35,10 +34,10 @@ def exp_of_poly(x: torch.Tensor, polynomial_coeffics: torch.Tensor, deg):
     """
     Evaluates the function
             exp{p(x)}
-    where p(x) = δ'x, and x is (x, x^2, x^3, ..., x^m)
+    where p(x) = δ'x, and x is (1, x, x^2, x^3, ..., x^m)
     """
-    x_shaped = x.repeat(deg + 1, 1).t()
-    x_at_powers = x_shaped ** torch.linspace(0, deg, deg + 1)
+    x_shaped = x.repeat(deg, 1).t()
+    x_at_powers = x_shaped ** torch.linspace(0, deg - 1, deg)
 
     polynomial = torch.einsum("ij, j->i", x_at_powers, polynomial_coeffics)
     return torch.exp(polynomial)
@@ -72,10 +71,12 @@ def integrate_function(
     relevant_locs = usample < integrand(candidate_sample) / (
         M * proposal_density
     )
-    # breakpoint()
+
     candidate_sample = candidate_sample[relevant_locs]
     # plt.hist(candidate_sample.numpy().flatten(), bins=500)
     # plt.show()
+
+    # now return the proportion of the points that is under the function...
     return M * len(candidate_sample) / sample_size
 
 
@@ -117,8 +118,13 @@ def get_deriv_roots(polynomial_coeffics: torch.Tensor, deg: int):
     """
     Returns the roots of the derivative of the polynomial (i.e. the peaks
     of the polynomial).
+
+    param deg: the order of the original polynmomial
+    param polynomial_coeffics: the coefficients of the original polynomial
     """
-    deriv_coeffics = polynomial_coeffics[1:] * torch.linspace(1, deg, deg)
+    deriv_coeffics = polynomial_coeffics[1:] * torch.linspace(
+        1, deg - 1, deg - 1
+    )
     roots = get_roots(deriv_coeffics, deg - 1)
     return roots
 
@@ -147,7 +153,7 @@ def get_polynomial_maximiser(polynomial_coeffics: torch.Tensor, deg: int):
     """
     # first, build the coefficients for the derivative
     # deriv_coeffics = torch.zeros(polynomial_coeffics.shape)
-    deriv_roots = get_deriv_roots(polynomial_coeffics, deg - 1)
+    deriv_roots = get_deriv_roots(polynomial_coeffics, deg)
 
     func_max = -math.inf
     if len(deriv_roots) > 0:
@@ -262,9 +268,9 @@ if __name__ == "__main__":
     )
     deg = 5
     test_roots = get_roots(coeffics, deg)
-    # breakpoint()
     print("final roots:", test_roots)
     test_max_root = get_polynomial_maximiser(coeffics, deg)
+
     print("final maximiser of polynomial:", test_max_root)
     poly_max = get_polynomial_max(coeffics, deg)
     exp_poly_max = torch.exp(poly_max)
@@ -289,7 +295,6 @@ if __name__ == "__main__":
     plt.plot(x, approximating_gaussian)
     plt.plot(x, exp_of_poly(x, coeffics, deg))
     peaks = get_deriv_roots(coeffics, deg)
-    # breakpoint()
     funcsum = torch.zeros(x.shape)
     for root in peaks:
         func1 = gaussian(
@@ -307,7 +312,7 @@ if __name__ == "__main__":
 
     monte_carlo_version = integrate_function(
         lambda x: exp_of_poly(x, coeffics, deg),
-        1.5,
+        torch.tensor(1.5),
         exp_poly_max,
     )
     print("Monte carlo integral:", monte_carlo_version)
