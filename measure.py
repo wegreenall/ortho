@@ -65,7 +65,6 @@ class MaximalEntropyDensity:
             breakpoint()
 
         weight_function = torch.exp(log_weight) * self.normalising_constant
-        # breakpoint()
         if (weight_function == math.inf).any() or (
             weight_function == -math.inf
         ).any():
@@ -174,7 +173,6 @@ class MaximalEntropyDensity:
         if -torch.log(integral) == math.inf:
             breakpoint()
 
-        # breakpoint()
         print(
             "weight maximiser:",
             weight_maximiser,

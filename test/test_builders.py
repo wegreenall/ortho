@@ -52,12 +52,10 @@ def double_fact(n: int) -> int:
         return n * double_fact(n - 2)
 
 
+@unittest.skip("NOT COMPLETE")
 class TestBuilders(unittest.TestCase):
     def setUp(self):
         self.order = 10
-        # self.coeffics = torch.Tensor([0.0, 0.5, 3.5, -4, -20])
-        # self.roots = torch.Tensor([-0.4617, -0.1361, 0, 0.3978])
-        # self.peaks = torch.Tensor([-0.3493, -0.0672, 0.2664])
         distribution = D.Normal(0.0, 1.0)
         sample_size = 10000000
         self.sample = distribution.sample((sample_size,))
@@ -82,15 +80,8 @@ class TestBuilders(unittest.TestCase):
             lambda x: x ** 5 - 10 * x ** 3 + 15 * x,
         ]
 
-    # def test_get_weight_function_from_sample(self):
-    # weight_function = get_weight_function_from_sample(
-    # self.coeffics, self.order)
-    # moments = weight_function._get_moments()
-    # self.assertTrue(torch.allclose(moments, self.normal_moments))
-
     def test_get_moments_from_sample(self):
         calculated_moments = get_moments_from_sample(self.sample, self.order)
-        breakpoint()
         self.assertTrue(
             torch.allclose(calculated_moments, self.normal_moments)
         )
@@ -126,7 +117,7 @@ class TestBuilders(unittest.TestCase):
             (1 / (torch.sqrt(torch.tensor(math.pi * 2)))),
         )
         calculated_moments = get_moments_from_sample(new_sample, self.order)
-        breakpoint()
+        # breakpoint()
         self.assertTrue(
             torch.allclose(calculated_moments, self.normal_moments, rtol=1e-01)
         )

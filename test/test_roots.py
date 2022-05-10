@@ -41,13 +41,11 @@ class TestRootFinding(unittest.TestCase):
 
     def test_get_max(self):
         poly_max = get_polynomial_max(self.coeffics, self.order)
-        # breakpoint()
         self.assertTrue(torch.allclose(poly_max, torch.tensor(0.2052), 1e-03))
 
     def test_get_second_deriv_at_max(self):
         poly_max = get_second_deriv_at_max(self.coeffics, self.order)
         # print(test_second_derivs[i])
-        # breakpoint()
         self.assertTrue(
             torch.allclose(poly_max, torch.tensor(-16.432455248097114))
         )
@@ -60,7 +58,6 @@ class TestRootFinding(unittest.TestCase):
             poly_max = get_second_deriv_at_root(
                 self.coeffics, self.order, root
             )
-            # print(poly_max)
             self.assertTrue(torch.allclose(poly_max, test_second_derivs[i]))
 
     def test_exp_of_poly(self):

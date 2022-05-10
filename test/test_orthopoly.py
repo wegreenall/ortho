@@ -102,19 +102,6 @@ class TestPolyFromMoments(unittest.TestCase):
                 )
             )
 
-    @unittest.skip("")
-    def test_moments_from_sample(self):
-        pass
-
-    @unittest.skip("Not implemented yet")
-    def test_poly_from_sample(self):
-        noise_parameter = torch.Tensor([[1.0]])
-        sample_size = 100
-        input_sample = D.Normal(0.0, 1.0).sample([sample_size])
-        output_sample = test_function(input_sample) + D.Normal(
-            0.0, noise_parameter.squeeze()
-        ).sample([sample_size])
-
 
 class TestOrthogonalPolynomials(unittest.TestCase):
     def setUp(self):
