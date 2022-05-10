@@ -5,7 +5,12 @@ from ortho.roots import (
     get_polynomial_max,
     get_second_deriv_at_root,
     get_second_deriv_at_max,
+    exp_of_poly,
 )
+
+# from ortho.builders import (
+# integrate_function,
+# )
 import math
 
 # from ortho.measure import coeffics_list
@@ -23,21 +28,26 @@ class TestRootFinding(unittest.TestCase):
         self.coeffics = torch.Tensor([0.0, 0.5, 3.5, -4, -20])
         self.roots = torch.Tensor([-0.4617, -0.1361, 0, 0.3978])
         self.peaks = torch.Tensor([-0.3493, -0.0672, 0.2664])
+        self.integrand = lambda x: (
+            (1 / math.sqrt(2 * math.pi)) * torch.exp(-(x ** 2) / 2)
+        ).squeeze()
 
     def test_get_maximiser(self):
         poly_maximiser = get_polynomial_maximiser(self.coeffics, self.order)
+        # breakpoint()
         self.assertTrue(
-            torch.allclose(poly_maximiser, torch.tensor(0.2664415115))
+            torch.allclose(poly_maximiser, torch.tensor(0.2664), 1e-03)
         )
 
     def test_get_max(self):
         poly_max = get_polynomial_max(self.coeffics, self.order)
         # breakpoint()
-        self.assertTrue(torch.allclose(poly_max, torch.tensor(0.2052349847)))
+        self.assertTrue(torch.allclose(poly_max, torch.tensor(0.2052), 1e-03))
 
     def test_get_second_deriv_at_max(self):
         poly_max = get_second_deriv_at_max(self.coeffics, self.order)
         # print(test_second_derivs[i])
+        # breakpoint()
         self.assertTrue(
             torch.allclose(poly_max, torch.tensor(-16.432455248097114))
         )
@@ -53,6 +63,11 @@ class TestRootFinding(unittest.TestCase):
             # print(poly_max)
             self.assertTrue(torch.allclose(poly_max, test_second_derivs[i]))
 
+    def test_exp_of_poly(self):
+        x = torch.linspace(-4, 4, 100)
+        result = exp_of_poly(x, self.coeffics, self.order)
+        self.assertEqual(result.shape, torch.Size([100]))
+
     # def test_get_second_deriv_at_root(self):
     # for root in self.roots:
 
@@ -66,3 +81,7 @@ class TestRootFinding(unittest.TestCase):
     # output_sample = test_function(input_sample) + D.Normal(
     # 0.0, noise_parameter.squeeze()
     # ).sample([sample_size])
+
+
+if __name__ == "__main__":
+    unittest.main()

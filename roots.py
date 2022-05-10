@@ -4,6 +4,7 @@ from typing import Callable
 import matplotlib.pyplot as plt
 
 
+torch.set_default_tensor_type(torch.DoubleTensor)
 """
 This file containes functions for calculating the roots; maxima; etc.
 for a polynomial for given coefficients, etc.
@@ -47,37 +48,7 @@ def polynomial_vals(x: torch.Tensor, coeffics):
     """
     Evaluates the polynomial built with parameter coeffics.
     """
-
     return
-
-
-def integrate_function(
-    integrand: Callable,
-    end_point: torch.Tensor,
-    func_max: torch.Tensor,
-    sample_size=2000 ** 2,
-):
-    """
-    Integrates a function using Importance sampling - this is for testing
-    purposes to see if the thing makes sense.
-    """
-    proposal_dist = torch.distributions.Uniform(-end_point, end_point)
-    uniform_dist = torch.distributions.Uniform(0, 1)
-    proposal_density = torch.Tensor([1 / (2 * end_point)])
-    M = func_max / proposal_density
-
-    usample = uniform_dist.sample((sample_size,))
-    candidate_sample = proposal_dist.sample((sample_size,))
-    relevant_locs = usample < integrand(candidate_sample) / (
-        M * proposal_density
-    )
-
-    candidate_sample = candidate_sample[relevant_locs]
-    # plt.hist(candidate_sample.numpy().flatten(), bins=500)
-    # plt.show()
-
-    # now return the proportion of the points that is under the function...
-    return M * len(candidate_sample) / sample_size
 
 
 def get_roots(polynomial_coeffics: torch.Tensor, deg: int):
@@ -104,12 +75,13 @@ def get_roots(polynomial_coeffics: torch.Tensor, deg: int):
     """
     normalised_coeffics = polynomial_coeffics / polynomial_coeffics[-1]
     assert normalised_coeffics[-1] == 1, "Normalising of coefficients failed!"
-    companion = torch.eye(deg - 1)
-    companion = torch.vstack((torch.zeros(deg - 1).unsqueeze(0), companion))
+    companion = torch.eye(deg - 2)
+    companion = torch.vstack((torch.zeros(deg - 2).unsqueeze(0), companion))
     companion = torch.hstack(
-        (companion, -normalised_coeffics[:deg].unsqueeze(1))
+        (companion, -normalised_coeffics[: deg - 1].unsqueeze(1))
     )
-    roots = torch.linalg.eig(companion).eigenvalues
+
+    roots = torch.linalg.eigvals(companion)
     real_roots = torch.real(roots[torch.isreal(roots)])
     return real_roots
 
@@ -310,10 +282,10 @@ if __name__ == "__main__":
     # plt.plot(x, funcsum * exp_poly_max / max(funcsum))
     plt.show()
 
-    monte_carlo_version = integrate_function(
-        lambda x: exp_of_poly(x, coeffics, deg),
-        torch.tensor(1.5),
-        exp_poly_max,
-    )
-    print("Monte carlo integral:", monte_carlo_version)
-    # print("exponential max of polynomial:", torch.exp(test_max))
+    # monte_carlo_version = integrate_function(
+    # lambda x: exp_of_poly(x, coeffics, deg),
+    # torch.tensor(1.5),
+    # exp_poly_max,
+    # )
+    # print("Monte carlo integral:", monte_carlo_version)
+    # # print("exponential max of polynomial:", torch.exp(test_max))
