@@ -68,7 +68,6 @@ class OrthogonalPolynomial:
     def set_betas(self, betas):
         """
         Setter for betas on orthogonal polynomial.
-
         """
         # assert (betas >= 0).all(), "Please make sure all betas are positive"
         self.betas = betas
@@ -101,7 +100,11 @@ class OrthonormalPolynomial(OrthogonalPolynomial):
 
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         result = super().__call__(x, deg, params)
-        normalising_coefficient = torch.prod(self.gammas[1:deg])
+        """
+        WARNING: TESTING for DEG+1 AS THE PRODUCT FOR THE ORTHONORMALISATION
+        """
+        # TODO: write test for orthonormality
+        normalising_coefficient = torch.prod(self.gammas[1 : deg + 1])
         return result / torch.sqrt(normalising_coefficient)
 
 
