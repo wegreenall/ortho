@@ -2,9 +2,11 @@ import torch
 import torch.distributions as D
 from ortho.measure import MaximalEntropyDensity
 from ortho.orthopoly import (
+    OrthonormalPolynomial,
     SymmetricOrthogonalPolynomial,
     SymmetricOrthonormalPolynomial,
 )
+from ortho.basis_functions import OrthonormalBasis
 from ortho.utils import sample_from_function, integrate_function, gauss_moment
 from typing import Callable
 
@@ -14,6 +16,28 @@ required for building out the Favard kernel.
 """
 
 torch.set_default_tensor_type(torch.DoubleTensor)
+
+
+def get_orthonormal_basis(order, betas, gammas) -> OrthonormalBasis:
+    """
+    For given order, betas and gammas, generates
+    an OrthonormalBasis.
+    """
+    poly = OrthonormalPolynomial(order, betas, gammas)
+    weight_function = MaximalEntropyDensity(order, betas, gammas)
+    return OrthonormalBasis(poly, weight_function, 1, order)
+
+
+def get_symmetric_orthonormal_basis(order, gammas) -> OrthonormalBasis:
+    """
+    For given order, betas and gammas, generates
+    an OrthonormalBasis.
+    """
+    poly = SymmetricOrthonormalPolynomial(order, gammas)
+    weight_function = MaximalEntropyDensity(
+        order, torch.zeros(2 * order), gammas
+    )
+    return OrthonormalBasis(poly, weight_function, 1, order)
 
 
 def get_weight_function_from_sample(
@@ -112,7 +136,7 @@ def get_gammas_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
     component in any given situation.
     """
     return get_gammas_from_moments(
-        get_moments_from_sample(sample, order), order
+        get_moments_from_sample(sample, 2 * order), 2 * order
     )
 
 
