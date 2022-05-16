@@ -107,7 +107,6 @@ class MaximalEntropyDensity:
             1 / torch.linspace(2, self.order + 1, self.order),
             torch.linspace(1, self.order, self.order),
         )
-
         system_matrix = ratios_matrix * moment_matrix
         lambdas = torch.linalg.solve(system_matrix, moment_vector)
         assert torch.allclose(system_matrix @ lambdas, moment_vector)
