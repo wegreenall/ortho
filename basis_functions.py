@@ -77,10 +77,14 @@ class Basis:
         The return shape:
 
         """
+        # breakpoint()
         # check input shape
-        if len(x.shape) == 1:
-            x = x.unsqueeze(1)
-        if x.shape[1] != self.dimension:
+        print("x.shape:", x.shape)
+        print("x though:", x)
+        print("\n")
+        if len(x.shape) <= 1:
+            x = x.unsqueeze(-1)
+        elif x.shape[1] != self.dimension:
             raise ValueError(
                 "The dimension of x should be {dim} for this,\
                               because that is the dim of the\

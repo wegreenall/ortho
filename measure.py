@@ -89,7 +89,7 @@ class MaximalEntropyDensity:
 
     def _get_lambdas(self) -> torch.Tensor:
         """
-        Solves the system m = λM to acquire the Lagrangian multipliers for the
+        Solves the system m = Mλ to acquire the Lagrangian multipliers for the
         maximal entropy density given the sequence of moments.
 
         Given that the Lagrangian multiplier signs do not matter,
@@ -510,9 +510,6 @@ if __name__ == "__main__":
         plt.show()
         # moments = med._get_moments()
         # print(result)
-    # poly = OrthogonalPolynomial(order, betas, gammas)
-    # mus = get_moments_from_poly(poly)
-    # print("moments from a random polynomial linear moment functional:", mus)
 
     # # testing the moment acquirer
     # s = 0 * torch.ones(1 * order)
