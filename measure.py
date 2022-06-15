@@ -303,7 +303,7 @@ class CatNet(nn.Module):
         # Check the right size of the initial s
         if (betas.shape[0] != 2 * order) or (gammas.shape[0] != 2 * order):
             raise ValueError(
-                r"Please provide at least 2 * order + 1 parameters for beta and gamma"
+                r"Please provide at least 2 * order parameters for beta and gamma"
             )
         # breakpoint()
         self.order = order

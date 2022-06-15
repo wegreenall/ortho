@@ -1,3 +1,4 @@
+from math import floor
 import torch
 import torch.distributions as D
 from ortho.measure import MaximalEntropyDensity
@@ -98,10 +99,64 @@ def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
     dets[0] = dets[1] = 1.0
     gammas = torch.zeros(order)
     for i in range(order):
-        hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)
+        hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)  # [1:, :]
+        # print(hankel_matrix)
+        # print("In the first instance, this should be μ_0 only")
+        # breakpoint()
         dets[i + 2] = torch.linalg.det(hankel_matrix)
+
     gammas = dets[:-2] * dets[2:] / (dets[1:-1] ** 2)
+    # breakpoint()
     return gammas
+
+
+def get_betas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+    """
+
+    # first build the prime determinants:
+    prime_dets = torch.zeros(order + 2)
+    prime_dets[0] = 0.0
+    prime_dets[1] = moments[1]  # i.e. the first moment.
+
+    # now build the standard determinants
+    dets = torch.zeros(order + 2)
+    dets[0] = dets[1] = 1.0
+    betas = torch.zeros(order)
+
+    # build out the determinants of the matrices
+    for i in range(order - 1):
+        hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)
+        if i == 0:
+            prime_moments = torch.tensor([[1.0]])
+        else:
+            prime_moments = torch.cat(
+                (moments[: 2 * i], moments[2 * i + 2].unsqueeze(0))
+            )
+        prime_hankel_matrix = prime_moments.unfold(0, i + 1, 1)
+        dets[i + 2] = torch.linalg.det(hankel_matrix)
+        prime_dets[i + 2] = torch.linalg.det(prime_hankel_matrix)
+
+    betas = prime_dets[:-2] / dets[:-2] - prime_dets[:-2] / dets[1:-1]
+    return betas
+
+
+def get_gammas_betas_from_moments(
+    moments: torch.Tensor, order: int
+) -> (torch.Tensor, torch.Tensor):
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the betas and gammas that correspond to them.
+
+    This is known as the "Chebyshev algorithm (Gautschi 1982)".
+    """
+    gammas = get_gammas_from_moments(moments, order)
+    betas = get_betas_from_moments(moments, order)
+    return (betas, gammas)
 
 
 def get_poly_from_moments(
@@ -161,9 +216,9 @@ if __name__ == "__main__":
     sample = dist.sample([4000 ** 2])
     order = 10
     checked_moments = get_moments_from_sample(sample, order)[: order + 2]
-    print(
-        "Should be like standard normal moments:",
-    )
+    # print(
+    # "Should be like standard normal moments:",
+    # )
 
     # normal moments:
     normal_moments = []
@@ -171,4 +226,42 @@ if __name__ == "__main__":
         normal_moments.append(gauss_moment(n))
     normal_moments = torch.Tensor(normal_moments)[: order + 1]
     # breakpoint()
-    print(checked_moments[2:] / normal_moments[1:])
+    # print(checked_moments[2:] / normal_moments[1:])
+
+    # now I build an example with some known assymetric moments and
+    # known betas and gammas:
+    order = 5  # m
+    catalan = True
+    if not catalan:
+        true_moments = torch.Tensor(
+            [
+                1.0,
+                1.0,
+                2.0,
+                4.0,
+                9.0,
+                21.0,
+                51.0,
+                127.0,
+                323.0,
+                835.0,
+                2188.0,
+                5798.0,
+            ]
+        )
+        true_betas = torch.ones(order)
+        true_gammas = torch.ones(order)
+    else:
+        true_moments = torch.Tensor(
+            [1.0, 0.0, 1.0, 0.0, 2.0, 0.0, 5.0, 0.0, 14.0, 0.0]
+        )
+        true_betas = torch.zeros(order)
+        true_gammas = torch.ones(order)
+    # order = floor(len(true_moments) / 2)
+
+    gammas = get_gammas_from_moments(true_moments, order)
+    betas = get_betas_from_moments(true_moments, order)
+    print("calculated betas:", betas)
+    print("calculated gammas:", gammas)
+    print("true betas:", true_betas)
+    print("true gammas:", true_gammas)
