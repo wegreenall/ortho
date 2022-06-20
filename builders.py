@@ -19,13 +19,18 @@ required for building out the Favard kernel.
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 
-def get_orthonormal_basis(order, betas, gammas) -> OrthonormalBasis:
+def get_orthonormal_basis(
+    betas: torch.Tensor,
+    gammas: torch.Tensor,
+    order: int,
+    weight_function: Callable,
+) -> OrthonormalBasis:
     """
     For given order, betas and gammas, generates
     an OrthonormalBasis.
     """
     poly = OrthonormalPolynomial(order, betas, gammas)
-    weight_function = MaximalEntropyDensity(order, betas, gammas)
+    # weight_function = MaximalEntropyDensity(order, betas, gammas)
     return OrthonormalBasis(poly, weight_function, 1, order)
 
 
@@ -66,26 +71,35 @@ def get_moments_from_function(
     return get_moments_from_sample(sample, order)
 
 
-def get_moments_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
+def get_moments_from_sample(
+    sample: torch.Tensor,
+    order: int,
+    weight_function=lambda x: torch.ones(x.shape),
+) -> torch.Tensor:
     """
-    Returns a sequence of moments calculated from a sample.
-    The odd-ordered moments are set to 0 to handle the fact that we are
-    calculating a symmetric orthogonal polynomial (we only have one equation
-    for each parameter that we want to solve for.
+    Returns a sequence of _order_ moments calculated from a sample - including
+    the first element which is the moment of order 0.
+
+    Note that the resulting sequence will be of length order + 1, but we need
+    2 * order to build _order_ gammas and _order_ betas,
+    so don't forget to take this into account when using the function.
     """
-    powers_of_sample = sample.repeat(2 * order + 2, 1).t() ** torch.linspace(
-        0, 2 * order + 1, 2 * order + 2
+    powers_of_sample = sample.repeat(order + 1, 1).t() ** torch.linspace(
+        0, order, order + 1
     )
-    estimated_moments = torch.mean(powers_of_sample, dim=0)
+
+    weight = weight_function(sample).repeat(order + 1, 1).t()
+    estimated_moments = torch.mean(powers_of_sample * weight, dim=0)
 
     # build moments
-    moments = torch.zeros(2 * order + 2)
-    moments[0] = 1
-    for i in range(1, 2 * order + 2):
-        if i % 2 == 0:  # i.e. even
-            moments[i] = estimated_moments[i]
+    # moments = torch.zeros(2 * order + 2)
+    # moments[0] = 1
+    # for i in range(1, 2 * order + 2):
+    # if i % 2 == 0:  # i.e. even
+    # moments[i] = estimated_moments[i]
+
     # breakpoint()
-    return moments
+    return estimated_moments
 
 
 def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
@@ -98,11 +112,12 @@ def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
     dets = torch.zeros(order + 2)
     dets[0] = dets[1] = 1.0
     gammas = torch.zeros(order)
+    assert (
+        len(moments) >= 2 * order
+    ), "Please provide at least 2 * order moments. Don't forget to include the zeroth moment"
+    # breakpoint()
     for i in range(order):
         hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)  # [1:, :]
-        # print(hankel_matrix)
-        # print("In the first instance, this should be μ_0 only")
-        # breakpoint()
         dets[i + 2] = torch.linalg.det(hankel_matrix)
 
     gammas = dets[:-2] * dets[2:] / (dets[1:-1] ** 2)
@@ -129,19 +144,24 @@ def get_betas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
     betas = torch.zeros(order)
 
     # build out the determinants of the matrices
-    for i in range(order - 1):
+    for i in range(order):
         hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)
-        if i == 0:
-            prime_moments = torch.tensor([[1.0]])
-        else:
-            prime_moments = torch.cat(
-                (moments[: 2 * i], moments[2 * i + 2].unsqueeze(0))
+        if i > 1:
+            prime_hankel_matrix = torch.hstack(
+                (hankel_matrix[:-1, :-2], hankel_matrix[:-1, -1].unsqueeze(1))
             )
-        prime_hankel_matrix = prime_moments.unfold(0, i + 1, 1)
+            prime_dets[i + 1] = torch.linalg.det(prime_hankel_matrix)
         dets[i + 2] = torch.linalg.det(hankel_matrix)
-        prime_dets[i + 2] = torch.linalg.det(prime_hankel_matrix)
 
-    betas = prime_dets[:-2] / dets[:-2] - prime_dets[:-2] / dets[1:-1]
+    # for i in range(1, order - 1):
+    # prime_moments = torch.cat(
+    # (moments[: 2 * i - 1], moments[2 * i].unsqueeze(0))
+    # )
+    # breakpoint()
+    # prime_hankel_matrix = prime_moments.unfold(0, i + 1, 1)
+    # prime_dets[i + 2] = torch.linalg.det(prime_hankel_matrix)
+    # breakpoint()
+    betas = prime_dets[2:] / dets[2:] - prime_dets[1:-1] / dets[1:-1]
     return betas
 
 
@@ -152,8 +172,11 @@ def get_gammas_betas_from_moments(
     Accepts a tensor containing the moments from a given
     distribution, and generates the betas and gammas that correspond to them.
 
-    This is known as the "Chebyshev algorithm (Gautschi 1982)".
+    This is known as the "Chebyshev algorithm" (Gautschi 1982).
     """
+    if order + 1 == len(moments):
+        print("excess moment: truncating")
+        moments = moments[1:]
     gammas = get_gammas_from_moments(moments, order)
     betas = get_betas_from_moments(moments, order)
     return (betas, gammas)
@@ -191,7 +214,7 @@ def get_gammas_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
     component in any given situation.
     """
     return get_gammas_from_moments(
-        get_moments_from_sample(sample, 2 * order), 2 * order
+        get_moments_from_sample(sample, 2 * order), order
     )
 
 
@@ -230,8 +253,8 @@ if __name__ == "__main__":
 
     # now I build an example with some known assymetric moments and
     # known betas and gammas:
-    order = 5  # m
-    catalan = True
+    order = 7  # m
+    catalan = False
     if not catalan:
         true_moments = torch.Tensor(
             [

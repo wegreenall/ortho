@@ -52,7 +52,6 @@ class OrthogonalPolynomial:
             result = torch.ones(x.shape)
         elif deg == 1:
             result = self.leading * (x - self.betas[0])
-            # breakpoint()
         else:
             result = (self.leading * x - self.betas[deg - 1]) * self(
                 x, deg - 1, params

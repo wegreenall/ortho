@@ -82,14 +82,6 @@ class TestPolyFromMoments(unittest.TestCase):
         gammas = get_gammas_from_moments(moments, self.order)
         self.assertTrue(torch.allclose(gammas, torch.ones(gammas.shape)))
 
-    def test_moments_to_gammas(self):
-        gammas = get_gammas_from_moments(self.moments_2, 6)
-        self.assertTrue(
-            torch.allclose(
-                gammas, torch.Tensor([1.0, 3.0, 6.0, 9.0, 12.0, 15.0])
-            )
-        )
-
     def test_poly_from_moments(self):
         moments = self.catalans[: 2 * self.order + 2]
         poly = get_poly_from_moments(moments, self.order)
@@ -121,9 +113,13 @@ class TestOrthogonalPolynomials(unittest.TestCase):
             lambda x: x ** 4 - 6 * x ** 2 + 3,
             lambda x: x ** 5 - 10 * x ** 3 + 15 * x,
         ]
+
+        # self.betas = torch.ones()
+        self.gammas = torch.linspace(0, self.order, self.order)
+        self.normaldist = D.Normal(0.0, 1.0)
+
         return
 
-    @unittest.skip("Not Implemented Yet.")
     def test_orthonormality(self):
         """
         To check the integral of the function, remember
@@ -153,15 +149,20 @@ class TestOrthogonalPolynomials(unittest.TestCase):
         n = 20
 
         # unif = torch.distributions.Uniform(lb, ub)
-        N = 1000000
-        sample = torch.quasirandom.SobolEngine(1).draw(N)
+        N = 100000
+        sample = torch.quasirandom.SobolEngine(1, scramble=True).draw(N)
+        normal_sample = self.normaldist.icdf(sample)
+        x_axis = torch.linspace(-4, 4, 1000)
 
-        func_means = torch.zeros(n)
-        for i in range(0, n):
-            break
-        self.assertTrue(
-            (torch.abs(torch.mean(func_means) - 1) < 0.00001).all()
-        )
+        # func_means = torch.zeros(n)
+        for i, poly in enumerate(self.prob_polynomials):
+            func_mean = (poly(normal_sample) * poly(normal_sample)) / (
+                math.factorial(i)
+            )
+
+            result = torch.abs(torch.mean(func_mean) - 1)
+            print(result)
+            # self.assertTrue((result < 0.00001))
 
     def test_correctness(self):
         order = 5
