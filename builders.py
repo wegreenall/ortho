@@ -19,6 +19,16 @@ required for building out the Favard kernel.
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 
+def get_orthonormal_basis_from_sample(
+    input_sample: torch.Tensor, weight_function: Callable, order: int
+) -> OrthonormalBasis:
+    betas, gammas = get_gammas_betas_from_moments(
+        get_moments_from_sample(input_sample, order, weight_function), order
+    )
+    poly = OrthonormalPolynomial(order, betas, gammas)
+    return OrthonormalBasis(poly, weight_function, 1, order)
+
+
 def get_orthonormal_basis(
     betas: torch.Tensor,
     gammas: torch.Tensor,
