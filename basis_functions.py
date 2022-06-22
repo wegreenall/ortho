@@ -79,9 +79,6 @@ class Basis:
         """
         # breakpoint()
         # check input shape
-        print("x.shape:", x.shape)
-        print("x though:", x)
-        print("\n")
         if len(x.shape) <= 1:
             x = x.unsqueeze(-1)
         elif x.shape[1] != self.dimension:
