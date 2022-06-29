@@ -83,9 +83,8 @@ class TestBuilders(unittest.TestCase):
     # @unittest.skip("bad example")
     def test_get_moments_from_sample(self):
         calculated_moments = get_moments_from_sample(self.sample, self.order)
-        # breakpoint()
         self.assertEqual(
-            calculated_moments.shape, torch.Size([2 * self.order + 2])
+            calculated_moments.shape, torch.Size([self.order + 1])
         )
 
     def test_get_gammas_from_moments(self):
@@ -104,21 +103,27 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
+    @unittest.skip("Not implemented")
     def test_get_orthonormal_basis(self):
         pass
 
+    @unittest.skip("Not implemented")
     def test_get_symmetric_orthonormal_basis(self):
         pass
 
+    @unittest.skip("Not implemented")
     def test_get_weight_function_from_sample(self):
         pass
 
+    @unittest.skip("Not implemented")
     def test_get_moments_from_function(self):
         pass
 
+    @unittest.skip("Not implemented")
     def test_get_betas_from_moments(self):
         pass
 
+    @unittest.skip("Not implemented")
     def test_get_gammas_betas_from_moments(self):
         pass
 

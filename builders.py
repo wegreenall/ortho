@@ -23,7 +23,8 @@ def get_orthonormal_basis_from_sample(
     input_sample: torch.Tensor, weight_function: Callable, order: int
 ) -> OrthonormalBasis:
     betas, gammas = get_gammas_betas_from_moments(
-        get_moments_from_sample(input_sample, order, weight_function), order
+        get_moments_from_sample(input_sample, 2 * order, weight_function),
+        order,
     )
     poly = OrthonormalPolynomial(order, betas, gammas)
     return OrthonormalBasis(poly, weight_function, 1, order)
@@ -83,28 +84,33 @@ def get_moments_from_function(
 
 def get_moments_from_sample(
     sample: torch.Tensor,
-    order: int,
+    moment_count: int,
     weight_function=lambda x: torch.ones(x.shape),
 ) -> torch.Tensor:
     """
-    Returns a sequence of _order_ moments calculated from a sample - including
+    Returns a sequence of _moment_count_ moments calculated from a sample - including
     the first element which is the moment of order 0.
 
     Note that the resulting sequence will be of length order + 1, but we need
     2 * order to build _order_ gammas and _order_ betas,
     so don't forget to take this into account when using the function.
-    """
-    powers_of_sample = sample.repeat(order + 1, 1).t() ** torch.linspace(
-        0, order, order + 1
-    )
 
-    weight = weight_function(sample).repeat(order + 1, 1).t()
+    Example: I need to calculate 10 betas and 10 gammas: (i.e. I want to
+            build the basis up to order 10). I take:
+            moments = get_moments_from_sample(sample, 20, weight_function)
+
+    """
+    powers_of_sample = sample.repeat(
+        moment_count + 1, 1
+    ).t() ** torch.linspace(0, moment_count, moment_count + 1)
+
+    weight = weight_function(sample).repeat(moment_count + 1, 1).t()
     estimated_moments = torch.mean(powers_of_sample * weight, dim=0)
 
     # build moments
-    # moments = torch.zeros(2 * order + 2)
+    # moments = torch.zeros(2 * moment_count + 2)
     # moments[0] = 1
-    # for i in range(1, 2 * order + 2):
+    # for i in range(1, 2 * moment_count + 2):
     # if i % 2 == 0:  # i.e. even
     # moments[i] = estimated_moments[i]
 
