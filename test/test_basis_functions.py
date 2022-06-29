@@ -3,12 +3,30 @@ import unittest
 
 import torch
 
-from basis_functions import (
+from ortho.basis_functions import (
     Basis,
+    RandomFourierFeatureBasis,
     smooth_exponential_basis,
     standard_chebyshev_basis,
 )
 from special import hermval
+
+
+class TestRandomFourierFeatureBasis(unittest.TestCase):
+    def setUp(self):
+        self.order = 20
+        self.dimension = 2
+        self.input_size = 100
+        self.random_fourier_basis = RandomFourierFeatureBasis(
+            self.dimension, self.order
+        )
+
+    def test_output_shape(self):
+        x = torch.ones((self.input_size, self.dimension))
+        output = self.random_fourier_basis(x)
+        self.assertEqual(
+            output.shape, torch.Size([self.input_size, self.order])
+        )
 
 
 class TestBasisClass(unittest.TestCase):

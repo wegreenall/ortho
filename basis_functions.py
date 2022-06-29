@@ -6,6 +6,7 @@ from ortho.orthopoly import OrthogonalPolynomial
 # matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import torch
+import torch.distributions as D
 
 # from framework import special, utils
 from ortho.polynomials import chebyshev_first, chebyshev_second
@@ -74,7 +75,7 @@ class Basis:
         """
         Returns the whole basis evaluated at an input.
 
-        The return shape:
+        output shape: [x.shape[0], self.order]
 
         """
         # breakpoint()
@@ -102,6 +103,43 @@ class Basis:
 
     def get_params(self):
         return self.params
+
+
+class RandomFourierFeatureBasis(Basis):
+    def __init__(self, dim: int, order: int):
+        """
+        Random Fourier Feature basis for constructing the
+        """
+        self.w_dist = D.Normal(torch.zeros(dim), torch.ones(dim))
+        self.b_dist = D.Uniform(0.0, 2 * math.pi)
+        self.b_sample_shape = torch.Size([order])
+        self.w_sample_shape = torch.Size([order])
+
+        self.b = self.b_dist.sample(self.b_sample_shape)
+        self.w = self.w_dist.sample(self.w_sample_shape)  # .squeeze(1)
+        self.order = order
+        self.params = None
+
+    def __call__(self, x):
+        """
+        Returns the value of these random features evaluated at the inputs x.
+
+        output shape: [x.shape[0], self.order]
+        """
+        if len(x.shape) == 1:  # i.e. the single dimension is implicit
+            x = x.unsqueeze(1)
+
+        n = x.shape[0]
+        b = self.b.repeat(n, 1).t()
+        z = (math.sqrt(2.0 / self.order) * torch.cos(self.w @ x.t() + b)).t()
+        # print(z.shape)
+        return z
+
+    def get_w(self):
+        """
+        Getter for feature coefficients.
+        """
+        return self.w
 
 
 class OrthonormalBasis(Basis):
@@ -438,4 +476,10 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
 
 
 if __name__ == "__main__":
-    pass
+    # pass
+    rff = RandomFourierFeatureBasis(2, 1000)
+    # x = torch.linspace(-1, 1, 100)
+    x = torch.ones((1000, 2))
+
+    plt.plot(x, rff(x))
+    plt.show()
