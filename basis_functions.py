@@ -104,13 +104,48 @@ class Basis:
     def get_params(self):
         return self.params
 
+    def __add__(self, other):
+        """
+        When adding two bases, return a basis that
+        is of the same
+        """
+        if self.order != other.order:
+            raise ValueError(
+                "Other basis is not of the same order as this basis. This Basis order: {this_order}; other Rasis order: {other_order}".format(
+                    this_order=self.order, other_order=other.order
+                )
+            )
+        if self.dim != other.dim:
+            raise ValueError(
+                "Other basis is not of the same dim as this basis. This Basis order: {this_dim}; other Rasis order: {other_dim}".format(
+                    this_dim=self.dim, other_dim=other.dim
+                )
+            )
+        new_basis = CompositeBasis(self, other)
+        return new_basis
+
+
+class CompositeBasis(Basis):
+    def __init__(self, old_basis, new_basis: Basis):
+        self.old_basis = old_basis
+        self.new_basis = new_basis
+
+    def __call__(self, x):
+        return self.old_basis(x) + self.new_basis(x)
+
 
 class RandomFourierFeatureBasis(Basis):
-    def __init__(self, dim: int, order: int):
+    def __init__(
+        self,
+        dim: int,
+        order: int,
+        spectral_distribution: D.Distribution,
+    ):
         """
         Random Fourier Feature basis for constructing the
         """
-        self.w_dist = D.Normal(torch.zeros(dim), torch.ones(dim))
+        # self.w_dist = D.Normal(torch.zeros(dim), torch.ones(dim))
+        self.w_dist = spectral_distribution  # samples are the size of "dim" which is 1-d for stationary, 2-d for non-stationary.
         self.b_dist = D.Uniform(0.0, 2 * math.pi)
         self.b_sample_shape = torch.Size([order])
         self.w_sample_shape = torch.Size([order])
@@ -132,12 +167,13 @@ class RandomFourierFeatureBasis(Basis):
         n = x.shape[0]
         b = self.b.repeat(n, 1).t()
         z = (math.sqrt(2.0 / self.order) * torch.cos(self.w @ x.t() + b)).t()
+        # breakpoint()
         # print(z.shape)
         return z
 
     def get_w(self):
         """
-        Getter for feature coefficients.
+        Getter for feature spectral weights.
         """
         return self.w
 
@@ -477,9 +513,16 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
 
 if __name__ == "__main__":
     # pass
-    rff = RandomFourierFeatureBasis(2, 1000)
+    dim = 1
+    order = 5000
+    point_count = 1000
+    spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
+    rff = RandomFourierFeatureBasis(dim, order, spectral_distribution)
     # x = torch.linspace(-1, 1, 100)
-    x = torch.ones((1000, 2))
+    # x = torch.ones((order, dim))
+    x = torch.linspace(-3, 3, point_count)
 
-    plt.plot(x, rff(x))
+    data = rff(x)
+    # breakpoint()
+    plt.plot(x.numpy().flatten(), torch.sum(data, dim=1).numpy().flatten())
     plt.show()

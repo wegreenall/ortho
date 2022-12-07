@@ -2,9 +2,11 @@ import math
 import unittest
 
 import torch
+import torch.distributions as D
 
 from ortho.basis_functions import (
     Basis,
+    CompositeBasis,
     RandomFourierFeatureBasis,
     smooth_exponential_basis,
     standard_chebyshev_basis,
@@ -17,8 +19,9 @@ class TestRandomFourierFeatureBasis(unittest.TestCase):
         self.order = 20
         self.dimension = 2
         self.input_size = 100
+        self.spectral_distribution = D.Normal(0.0, 1.0)
         self.random_fourier_basis = RandomFourierFeatureBasis(
-            self.dimension, self.order
+            self.dimension, self.order, self.spectral_distribution
         )
 
     def test_output_shape(self):
@@ -51,6 +54,49 @@ class TestBasisClass(unittest.TestCase):
         N = 100
         x = torch.linspace(0.1, 10 - 0.1, N).unsqueeze(1)
         y = self.basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+
+class TestCompositeBasisClass(unittest.TestCase):
+    def setUp(self):
+        bases = standard_chebyshev_basis
+        self.dimension = 1
+        self.max_degree = 10
+        params_1 = {
+            "upper_bound": torch.tensor(10.0, dtype=float),
+            "lower_bound": torch.tensor(0.0, dtype=float),
+        }
+        self.basis_1 = Basis(bases, self.dimension, self.max_degree, params_1)
+        self.basis_2 = Basis(bases, self.dimension, self.max_degree, params_1)
+        self.basis = CompositeBasis(self.basis_1, self.basis_2)
+        self.second_basis = CompositeBasis(self.basis, self.basis_2)
+
+    def test_shape_flat(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N)
+        y = self.basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+    def test_shape(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N).unsqueeze(1)
+        y = self.basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+    def test_composite_composite_shape(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N)
+        y = self.second_basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+    def test_composite_composite_shape_flat(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N).unsqueeze(1)
+        y = self.second_basis(x)  # test output, should be a 10^2 matrix
         self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
         pass
 
