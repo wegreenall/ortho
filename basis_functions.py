@@ -71,6 +71,12 @@ class Basis:
         """
         return self.dimension
 
+    def get_order(self):
+        """
+        Getter method for the dimension of the model.
+        """
+        return self.order
+
     def __call__(self, x):
         """
         Returns the whole basis evaluated at an input.
