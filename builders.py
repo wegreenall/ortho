@@ -3,15 +3,18 @@ import torch
 import torch.distributions as D
 from ortho.measure import MaximalEntropyDensity
 from ortho.orthopoly import (
+    OrthogonalPolynomial,
     OrthonormalPolynomial,
     SymmetricOrthogonalPolynomial,
     SymmetricOrthonormalPolynomial,
 )
+from ortho.polynomials import ProbabilistsHermitePolynomial, HermitePolynomial
 from ortho.basis_functions import OrthonormalBasis
 from ortho.utils import sample_from_function, integrate_function, gauss_moment
 from typing import Callable
 from torch.quasirandom import SobolEngine
 import matplotlib.pyplot as plt
+from termcolor import colored
 
 """
 This file contains builder functions for various components
@@ -122,6 +125,36 @@ def get_moments_from_sample_logged(
     return moments
 
 
+def get_orthogonal_moments_from_sample(
+    sample: torch.Tensor,
+    moment_count: int,
+    orthogonal_polynomial: OrthogonalPolynomial,
+    weight_function=lambda x: torch.ones(x.shape),
+) -> torch.Tensor:
+    """
+    Returns a sequence of _moment_count_ ORTHOGONAL moments calculated from a sample -
+    including the first element which is the moment of order 0.
+
+    Note that the resulting sequence will be of length order + 1, but we need
+    2 * order to build _order_ gammas and _order_ betas,
+    so don't forget to take this into account when using the function.
+
+    Example: I need to calculate 10 betas and 10 gammas: (i.e. I want to
+    build the basis up to order 10). I take:
+    moments = get_moments_from_sample(sample, 20, weight_function)
+    """
+    params = dict()
+    orthogonal_moments = torch.zeros(moment_count)
+    weighted_sample = weight_function(sample)
+    for deg in range(moment_count):
+        print("current deg", deg)
+        orthogonal_sample = orthogonal_polynomial(sample, deg, params)
+        orthogonal_moments[deg] = torch.mean(
+            orthogonal_sample * weighted_sample
+        )
+    return orthogonal_moments
+
+
 def get_moments_from_sample(
     sample: torch.Tensor,
     moment_count: int,
@@ -144,6 +177,11 @@ def get_moments_from_sample(
     )
     exponents = torch.linspace(1, moment_count, moment_count)
     powered_sample = torch.pow(stretched_sample, exponents)
+    stretched_weight = torch.einsum(
+        "i,ij->ij",
+        weight_function(sample),
+        torch.ones(sample.shape[0], moment_count),
+    )
     moments = torch.mean(powered_sample, axis=0)
     moments = torch.cat((torch.Tensor([1.0]), moments))
     return moments
@@ -265,6 +303,166 @@ def get_gammas_betas_from_moments(
     return (betas, gammas)
 
 
+def get_betas_from_moments_gautschi(
+    moments: torch.Tensor, order: int
+) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+
+    This method calculates the gammas via the recursion described in
+    Walter Gautschi:
+        On Generating Orthogonal Polynomials (1982). (section 2.3)
+
+    """
+    betas, _ = get_gammas_betas_from_moments(moments, order)
+    return betas
+
+
+def get_gammas_from_moments_gautschi(
+    moments: torch.Tensor, order: int
+) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+
+    This method calculates the gammas via the recursion described in
+    Walter Gautschi:
+        On Generating Orthogonal Polynomials (1982). (section 2.3)
+
+    """
+    _, gammas = get_gammas_betas_from_moments(moments, order)
+    return gammas
+
+
+def get_gammas_betas_from_moments_gautschi(
+    moments: torch.Tensor, order: int
+) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+
+    This method calculates the gammas via the recursion described in
+    Walter Gautschi:
+        On Generating Orthogonal Polynomials (1982). (section 2.3)
+
+    """
+    # breakpoint()
+    # initialisation
+    betas = torch.zeros(order)
+    gammas = torch.zeros(order)
+    sigma = torch.zeros(2 * order, 2 * order)
+    sigma[0, :] = 0
+    sigma[0, :] = moments
+    betas[0] = moments[1] / moments[0]
+    gammas[0] = moments[0]
+
+    # breakpoint()
+    # continuation
+    for k in range(1, order):
+        for l in range(k, 2 * order - k - 1):
+            sigma[k, l] = (
+                sigma[k - 1, l + 1]
+                - betas[k - 1] * sigma[k - 1, l]
+                - gammas[k - 1] * (sigma[k - 2, l] if k - 2 > -1 else 0)
+            )
+            betas[k] = (
+                sigma[k, k + 1] / sigma[k, k]
+                - sigma[k - 1, k] / sigma[k - 1, k - 1]
+            )
+            gammas[k] = sigma[k, k] / sigma[k - 1, k - 1]
+    return betas, gammas
+
+
+def get_betas_from_modified_moments_gautschi(
+    moments: torch.Tensor, order: int, polynomial: OrthogonalPolynomial
+) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the betas that correspond to them;
+    i.e., the betas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+
+    This method calculates the betas via the recursion described in
+    Walter Gautschi:
+        On Generating Orthogonal Polynomials (1982). (section 2.3)
+
+    """
+    betas, _ = get_gammas_betas_from_modified_moments_gautschi(
+        moments, order, polynomial
+    )
+    return betas
+
+
+def get_gammas_from_modified_moments_gautschi(
+    moments: torch.Tensor, order: int, polynomial: OrthogonalPolynomial
+) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+
+    This method calculates the gammas via the recursion described in
+    Walter Gautschi:
+        On Generating Orthogonal Polynomials (1982). (section 2.3)
+
+    """
+    _, gammas = get_gammas_betas_from_modified_moments_gautschi(
+        moments, order, polynomial
+    )
+    return gammas
+
+
+def get_gammas_betas_from_modified_moments_gautschi(
+    moments: torch.Tensor, order: int, polynomial: OrthogonalPolynomial
+) -> torch.Tensor:
+    """
+    Accepts a tensor containing the moments from a given
+    distribution, and generates the gammas that correspond to them;
+    i.e., the gammas from the orthogonal polynomial series that
+    is orthogonal w.r.t the linear moment functional with those moments.
+
+    This method calculates the gammas via the recursion described in
+    Walter Gautschi:
+        On Generating Orthogonal Polynomials (1982). (section 2.3)
+
+    """
+    # breakpoint()
+    # initialisation
+    input_betas = polynomial.get_betas()
+    input_gammas = polynomial.get_gammas()
+    betas = torch.zeros(order)
+    gammas = torch.zeros(order)
+    sigma = torch.zeros(2 * order, 2 * order)
+    sigma[0, :] = 0
+    sigma[0, :] = moments
+    betas[0] = moments[1] / moments[0]
+    gammas[0] = moments[0]
+
+    # continuation
+    for k in range(1, order):
+        for l in range(k, 2 * order - k - 1):
+            sigma[k, l] = (
+                sigma[k - 1, l + 1]
+                - (betas[k - 1] - input_betas[l]) * sigma[k - 1, l]
+                - gammas[k - 1] * (sigma[k - 2, l] if k - 2 > -1 else 0)
+                + input_gammas[l] * sigma[k - 1, l - 1]
+            )
+            betas[k] = (
+                sigma[k, k + 1] / sigma[k, k]
+                - sigma[k - 1, k] / sigma[k - 1, k - 1]
+            )
+            gammas[k] = sigma[k, k] / sigma[k - 1, k - 1]
+    return betas, gammas
+
+
 def get_poly_from_moments(
     moments: torch.Tensor,
     order: int,
@@ -318,8 +516,11 @@ def get_poly_from_sample(
 
 
 if __name__ == "__main__":
-    test_moments_from_sample = True
-    use_sobol = False
+    test_modified_moments = True
+    test_moments_from_sample = False
+    use_sobol = True
+    # normal moments:
+    order = 15
     if test_moments_from_sample:
         dist = D.Normal(0.0, 1.0)
         # sample = dist.sample([4000 ** 2])
@@ -330,40 +531,22 @@ if __name__ == "__main__":
             sample = dist.icdf(base_sample).squeeze()[2:]
         else:
             sample = dist.sample((sample_size,))
-        order = 15
         checked_moments = get_moments_from_sample(
             sample, order + 2
         )  # [: order + 2]
         checked_moments_logged = get_moments_from_sample_logged(
             sample, order + 2
         )
-        # [
-        # : order + 2
-        # ]
-    # print(
-    # "Should be like standard normal moments:",
-    # )
 
-    # normal moments:
-    normal_moments = []
-    for n in range(1, 2 * order + 2):
-        normal_moments.append(gauss_moment(n))
-    normal_moments = torch.cat(
-        (torch.Tensor([1.0]), torch.Tensor(normal_moments)[: order + 1])
-    )
-    # normal_moments[0] = 1.0
-
-    plt.plot(checked_moments, color="red")
-    plt.plot(checked_moments_logged, color="blue")
-    # plt.plot(checked_moments - checked_moments_logged, color="black")
-    plt.plot(normal_moments, color="green")
-    plt.show()
-    # breakpoint()
-    # print(checked_moments[2:] / normal_moments[1:])
+        plt.plot(checked_moments, color="red")
+        plt.plot(checked_moments_logged, color="blue")
+        # plt.plot(checked_moments - checked_moments_logged, color="black")
+        plt.plot(normal_moments, color="green")
+        plt.show()
 
     # now I build an example with some known assymetric moments and
     # known betas and gammas:
-    order = 7  # m
+    order = 6
     catalan = False
     if not catalan:
         true_moments = torch.Tensor(
@@ -386,7 +569,20 @@ if __name__ == "__main__":
         true_gammas = torch.ones(order)
     else:
         true_moments = torch.Tensor(
-            [1.0, 0.0, 1.0, 0.0, 2.0, 0.0, 5.0, 0.0, 14.0, 0.0]
+            [
+                1.0,
+                0.0,
+                1.0,
+                0.0,
+                2.0,
+                0.0,
+                5.0,
+                0.0,
+                14.0,
+                0.0,
+                42.0,
+                0.0,
+            ]
         )
         true_betas = torch.zeros(order)
         true_gammas = torch.ones(order)
@@ -398,3 +594,58 @@ if __name__ == "__main__":
     print("calculated gammas:", gammas)
     print("true betas:", true_betas)
     print("true gammas:", true_gammas)
+    normal_moments = []
+    for n in range(1, 2 * order):
+        normal_moments.append(gauss_moment(n))
+    normal_moments = torch.cat(
+        (torch.Tensor([1.0]), torch.Tensor(normal_moments))
+    )
+    # breakpoint()
+    betas, gammas = get_gammas_betas_from_moments_gautschi(
+        normal_moments, order
+    )
+    betas, gammas = get_gammas_betas_from_moments_gautschi(true_moments, order)
+    print("\n")
+    print(
+        colored("Gautschi betas and gammas:", "green"),
+        betas,
+        gammas,
+    )
+
+    # test modified moments
+    if test_modified_moments:
+        order = 12
+        # generate the moments and the sample
+        dist = D.Normal(0.0, 1.0)
+        sample_size = 20000
+        if use_sobol:
+            sobol = SobolEngine(dimension=1, scramble=True)
+            base_sample = sobol.draw(sample_size)
+            sample = dist.icdf(base_sample).squeeze()[2:]
+        else:
+            sample = dist.sample((sample_size,))
+
+        hermite_polynomial = ProbabilistsHermitePolynomial(2 * order)
+        # hermite_polynomial = HermitePolynomial(2 * order)
+        orthogonal_moments = get_orthogonal_moments_from_sample(
+            sample, 2 * order, hermite_polynomial
+        )
+        print(
+            "calculated orthogonal moments:",
+            colored(orthogonal_moments, "blue"),
+        )
+        plt.plot(torch.log(1 + orthogonal_moments))
+        plt.show()
+
+        orthogonal_moments = torch.zeros(2 * order)
+        orthogonal_moments[0] = 1
+        print(colored(orthogonal_moments, "green"))
+        betas, gammas = get_gammas_betas_from_modified_moments_gautschi(
+            orthogonal_moments, order, hermite_polynomial
+        )
+
+        print(
+            colored("Gautschi betas and gammas:", "green"),
+            betas,
+            gammas,
+        )

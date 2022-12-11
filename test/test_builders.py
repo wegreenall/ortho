@@ -6,6 +6,9 @@ from ortho.builders import (
     get_moments_from_sample,
     get_betas_from_moments,
     get_gammas_from_moments,
+    get_gammas_betas_from_moments,
+    get_gammas_betas_from_moments_gautschi,
+    get_gammas_betas_from_modified_moments_gautschi,
     integrate_function,
     sample_from_function,
     get_poly_from_moments,
@@ -15,6 +18,7 @@ from ortho.builders import (
     get_orthonormal_basis_from_sample,
 )
 from ortho.basis_functions import Basis
+from ortho.polynomials import ProbabilistsHermitePolynomial
 import math
 from torch.quasirandom import SobolEngine
 
@@ -136,16 +140,13 @@ class TestBuilders(unittest.TestCase):
         print(gammas)
 
         # comparison_gammas = torch.linspace(1.0, self.order - 1, self.order - 1)
-        breakpoint()
+        # breakpoint()
         self.assertTrue(torch.allclose(gammas, self.example_gammas), 5e-2)
 
     def test_get_gammas_from_moments(self):
-        moments = self.normal_moments + D.Normal(0.0, 0.0001).sample(
-            self.normal_moments.shape
-        )
+        moments = self.normal_moments
         gammas = get_gammas_from_moments(moments, self.order)
-        print("Gammas from moments:", gammas)
-        breakpoint()
+        # print("Gammas from moments:", gammas)
         self.assertTrue(
             torch.allclose(
                 gammas,
@@ -186,9 +187,51 @@ class TestBuilders(unittest.TestCase):
     def test_get_moments_from_function(self):
         pass
 
-    @unittest.skip("Not implemented")
     def test_get_gammas_betas_from_moments(self):
-        pass
+        betas, gammas = get_gammas_betas_from_moments(
+            self.normal_moments, self.order
+        )
+        betas_2 = get_betas_from_moments(self.normal_moments, self.order)
+        gammas_2 = get_gammas_from_moments(self.normal_moments, self.order)
+        self.assertTrue(torch.allclose(betas, betas_2))
+        self.assertTrue(torch.allclose(gammas, gammas_2))
+
+    def test_get_gammas_betas_from_moments_gautschi(self):
+        betas, gammas = get_gammas_betas_from_moments(
+            self.normal_moments, self.order
+        )
+        betas_2, gammas_2 = get_gammas_betas_from_moments_gautschi(
+            self.normal_moments[: 2 * self.order], self.order
+        )
+        self.assertTrue(torch.allclose(betas, betas_2))
+        self.assertTrue(torch.allclose(gammas, gammas_2))
+
+    def test_get_gammas_betas_from_modified_moments_gautschi(self):
+        polynomial = ProbabilistsHermitePolynomial(2 * self.order)
+        moments = torch.zeros(2 * self.order)
+        moments[0] = 1
+        betas, gammas = get_gammas_betas_from_modified_moments_gautschi(
+            moments,
+            self.order,
+            polynomial,
+        )
+        # Check that the betas are those for the Normal distribution (Hermite polynomials)
+        self.assertTrue(torch.allclose(betas, torch.zeros(betas.shape)))
+
+        # Check that the gammas are those for the Normal distribution (Hermite polynomials)
+        self.assertTrue(
+            torch.allclose(
+                gammas,
+                torch.cat(
+                    (
+                        torch.Tensor([1.0]),
+                        torch.linspace(1.0, self.order - 1, self.order - 1),
+                    )
+                ),
+                1e-02,
+            )
+        )
+        # self.assertTrue(torch.allclose(gammas, gammas_2))
 
     @unittest.skip("Not Relevant")
     def test_integrate_function(self):
