@@ -4,14 +4,19 @@ from ortho.builders import (
     get_weight_function_from_sample,
     get_moments_from_function,
     get_moments_from_sample,
+    get_betas_from_moments,
     get_gammas_from_moments,
     integrate_function,
     sample_from_function,
     get_poly_from_moments,
     get_gammas_from_sample,
     get_poly_from_sample,
+    get_orthonormal_basis,
+    get_orthonormal_basis_from_sample,
 )
+from ortho.basis_functions import Basis
 import math
+from torch.quasirandom import SobolEngine
 
 # from ortho.measure import coeffics_list
 import unittest
@@ -26,16 +31,28 @@ def function_for_sampling(x: torch.Tensor):
     return (1 / (math.sqrt(math.pi * 2))) * torch.exp(-(x ** 2) / 2)
 
 
-def gauss_moment(n: int) -> int:
+# def gauss_moment(n: int) -> int:
+# """
+# returns the n-th moment of a standard normal gaussian distribution.
+# """
+# if n == 0:
+# return 1
+# if n % 2 == 0:
+# return double_fact(n - 1)
+# else:
+# return 0
+
+
+def gauss_moment(order: int) -> list:
     """
-    Returns the n-th moment of a standard normal Gaussian distribution.
+    returns the n-th moment of a standard normal gaussian distribution.
     """
-    if n == 0:
+    if order == 0:
         return 1
-    if n % 2 == 0:
-        return double_fact(n - 1)
-    else:
+    if order == 1:
         return 0
+    else:
+        return (order - 1) * gauss_moment(order - 2)
 
 
 def double_fact(n: int) -> int:
@@ -52,23 +69,25 @@ def double_fact(n: int) -> int:
         return n * double_fact(n - 2)
 
 
-# @unittest.skip("NOT COMPLETE")
 class TestBuilders(unittest.TestCase):
     def setUp(self):
-        self.order = 10
+        self.order = 16
         distribution = D.Normal(0.0, 1.0)
-        sample_size = 10000000
+        sample_size = 100000
         self.sample = distribution.sample((sample_size,))
+        sobol = SobolEngine(dimension=1)
+        base_sample = sobol.draw(sample_size)
+        # self.sample = D.Normal(0.0, 1.0).icdf(base_sample).squeeze()[2:]
 
         self.end_point = torch.tensor(10.0)
         fineness = 1000
         self.input_points = torch.linspace(
             -self.end_point, self.end_point, fineness
         )
-        # normal moments:
-        normal_moments = []
-        for n in range(2 * self.order + 2):
-            normal_moments.append(gauss_moment(n))
+
+        normal_moments = [
+            gauss_moment(order) for order in range(2 * self.order + 2)
+        ]
         self.normal_moments = torch.Tensor(normal_moments)
 
         self.prob_polynomials = [
@@ -80,16 +99,53 @@ class TestBuilders(unittest.TestCase):
             lambda x: x ** 5 - 10 * x ** 3 + 15 * x,
         ]
 
-    # @unittest.skip("bad example")
-    def test_get_moments_from_sample(self):
-        calculated_moments = get_moments_from_sample(self.sample, self.order)
-        self.assertEqual(
-            calculated_moments.shape, torch.Size([self.order + 1])
+        self.weight_function = lambda x: torch.exp(-(x ** 2) / 2)
+        self.example_betas = torch.cat(
+            (
+                torch.Tensor([1.0]),
+                torch.linspace(1.0, self.order - 1, self.order - 1),
+            )
+        )
+        self.example_gammas = torch.cat(
+            (
+                torch.Tensor([1.0]),
+                torch.linspace(1.0, self.order - 1, self.order - 1),
+            )
         )
 
-    def test_get_gammas_from_moments(self):
+    # @unittest.skip("bad example")
+    def test_get_moments_from_sample(self):
+        moments = get_moments_from_sample(self.sample, self.order)
+        # breakpoint()
+        self.assertEqual(moments.shape, torch.Size([self.order + 1]))
+        self.assertTrue(torch.allclose(moments, self.normal_moments))
+
+    def test_get_betas_from_moments(self):
         moments = self.normal_moments
+        betas = get_betas_from_moments(moments, self.order)
+        self.assertTrue(
+            torch.allclose(
+                betas,
+                torch.zeros(self.order),
+                1e-02,
+            )
+        )
+
+    def test_get_gammas_from_sample(self):
+        gammas = get_gammas_from_sample(self.sample, self.order)  # [1:]
+        print(gammas)
+
+        # comparison_gammas = torch.linspace(1.0, self.order - 1, self.order - 1)
+        breakpoint()
+        self.assertTrue(torch.allclose(gammas, self.example_gammas), 5e-2)
+
+    def test_get_gammas_from_moments(self):
+        moments = self.normal_moments + D.Normal(0.0, 0.0001).sample(
+            self.normal_moments.shape
+        )
         gammas = get_gammas_from_moments(moments, self.order)
+        print("Gammas from moments:", gammas)
+        breakpoint()
         self.assertTrue(
             torch.allclose(
                 gammas,
@@ -103,9 +159,20 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
+    def test_get_orthonormal_basis_from_sample(self):
+        basis = get_orthonormal_basis_from_sample(
+            self.sample, self.weight_function, self.order
+        )
+        self.assertTrue(isinstance(basis, Basis))
+
     @unittest.skip("Not implemented")
     def test_get_orthonormal_basis(self):
-        pass
+        basis = get_orthonormal_basis(
+            self.example_betas,
+            self.example_gammas,
+            self.order,
+            self.weight_function,
+        )
 
     @unittest.skip("Not implemented")
     def test_get_symmetric_orthonormal_basis(self):
@@ -120,19 +187,10 @@ class TestBuilders(unittest.TestCase):
         pass
 
     @unittest.skip("Not implemented")
-    def test_get_betas_from_moments(self):
-        pass
-
-    @unittest.skip("Not implemented")
     def test_get_gammas_betas_from_moments(self):
         pass
 
-    def test_get_gammas_from_sample(self):
-        gammas = get_gammas_from_sample(self.sample, self.order)[1:]
-        comparison_gammas = torch.linspace(1.0, self.order - 1, self.order - 1)
-        # breakpoint()
-        self.assertTrue(torch.allclose(gammas, comparison_gammas), 5e-2)
-
+    @unittest.skip("Not Relevant")
     def test_integrate_function(self):
         # breakpoint()
         integral = integrate_function(
@@ -169,7 +227,6 @@ class TestBuilders(unittest.TestCase):
             with self.subTest(i=i):
                 polyvals = poly(self.input_points, i, None)
                 true_polyvals = self.prob_polynomials[i](self.input_points)
-                # breakpoint()
                 self.assertTrue(torch.allclose(polyvals, true_polyvals))
 
 

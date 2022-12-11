@@ -10,13 +10,15 @@ from ortho.orthopoly import (
 from ortho.basis_functions import OrthonormalBasis
 from ortho.utils import sample_from_function, integrate_function, gauss_moment
 from typing import Callable
+from torch.quasirandom import SobolEngine
+import matplotlib.pyplot as plt
 
 """
 This file contains builder functions for various components
 required for building out the Favard kernel.
 """
 
-torch.set_default_tensor_type(torch.DoubleTensor)
+# torch.set_default_tensor_type(torch.DoubleTensor)
 
 
 def get_orthonormal_basis_from_sample(
@@ -82,40 +84,105 @@ def get_moments_from_function(
     return get_moments_from_sample(sample, order)
 
 
-def get_moments_from_sample(
+def get_moments_from_sample_logged(
     sample: torch.Tensor,
     moment_count: int,
     weight_function=lambda x: torch.ones(x.shape),
 ) -> torch.Tensor:
     """
-    Returns a sequence of _moment_count_ moments calculated from a sample - including
-    the first element which is the moment of order 0.
+    Returns a sequence of _moment_count_ moments calculated from a sample -
+    including the first element which is the moment of order 0.
 
     Note that the resulting sequence will be of length order + 1, but we need
     2 * order to build _order_ gammas and _order_ betas,
     so don't forget to take this into account when using the function.
 
     Example: I need to calculate 10 betas and 10 gammas: (i.e. I want to
-            build the basis up to order 10). I take:
-            moments = get_moments_from_sample(sample, 20, weight_function)
-
+    build the basis up to order 10). I take:
+    moments = get_moments_from_sample(sample, 20, weight_function)
     """
-    powers_of_sample = sample.repeat(
-        moment_count + 1, 1
-    ).t() ** torch.linspace(0, moment_count, moment_count + 1)
+    stretched_sample = torch.einsum(
+        "i,ij->ij",
+        sample,
+        torch.ones(sample.shape[0], moment_count + 1),
+    )
+    exponents = torch.linspace(0, moment_count, moment_count + 1)
+    signs = torch.sign(stretched_sample) ** exponents
+    logged_stretched_sample = torch.log(torch.abs(stretched_sample))
 
-    weight = weight_function(sample).repeat(moment_count + 1, 1).t()
-    estimated_moments = torch.mean(powers_of_sample * weight, dim=0)
-
-    # build moments
-    # moments = torch.zeros(2 * moment_count + 2)
-    # moments[0] = 1
-    # for i in range(1, 2 * moment_count + 2):
-    # if i % 2 == 0:  # i.e. even
-    # moments[i] = estimated_moments[i]
-
+    # powered_sample = torch.pow(stretched_sample, exponents)
+    # logged_powered_sample = torch.einsum(
+    # "ij,j -> ij", stretched_sample, exponents
+    # )
+    logged_powered_sample = logged_stretched_sample * exponents
+    powered_sample = torch.exp(logged_powered_sample) * signs  # ** exponents
+    moments = torch.mean(powered_sample, axis=0)
+    # moments = torch.cat((torch.Tensor([1.0]), moments))
     # breakpoint()
-    return estimated_moments
+    return moments
+
+
+def get_moments_from_sample(
+    sample: torch.Tensor,
+    moment_count: int,
+    weight_function=lambda x: torch.ones(x.shape),
+) -> torch.Tensor:
+    """
+    Returns a sequence of _moment_count_ moments calculated from a sample -
+    including the first element which is the moment of order 0.
+
+    Note that the resulting sequence will be of length order + 1, but we need
+    2 * order to build _order_ gammas and _order_ betas,
+    so don't forget to take this into account when using the function.
+
+    Example: I need to calculate 10 betas and 10 gammas: (i.e. I want to
+    build the basis up to order 10). I take:
+    moments = get_moments_from_sample(sample, 20, weight_function)
+    """
+    stretched_sample = torch.einsum(
+        "i,ij->ij", sample, torch.ones(sample.shape[0], moment_count)
+    )
+    exponents = torch.linspace(1, moment_count, moment_count)
+    powered_sample = torch.pow(stretched_sample, exponents)
+    moments = torch.mean(powered_sample, axis=0)
+    moments = torch.cat((torch.Tensor([1.0]), moments))
+    return moments
+
+
+# def get_moments_from_sample(
+# sample: torch.Tensor,
+# moment_count: int,
+# weight_function=lambda x: torch.ones(x.shape),
+# ) -> torch.Tensor:
+# """
+# Returns a sequence of _moment_count_ moments calculated from a sample - including
+# the first element which is the moment of order 0.
+
+# Note that the resulting sequence will be of length order + 1, but we need
+# 2 * order to build _order_ gammas and _order_ betas,
+# so don't forget to take this into account when using the function.
+
+# Example: I need to calculate 10 betas and 10 gammas: (i.e. I want to
+# build the basis up to order 10). I take:
+# moments = get_moments_from_sample(sample, 20, weight_function)
+
+# """
+# powers_of_sample = sample.repeat(
+# moment_count + 1, 1
+# ).t() ** torch.linspace(0, moment_count, moment_count + 1)
+
+# weight = weight_function(sample).repeat(moment_count + 1, 1).t()
+# estimated_moments = torch.mean(powers_of_sample * weight, dim=0)
+
+# # build moments
+# # moments = torch.zeros(2 * moment_count + 2)
+# # moments[0] = 1
+# # for i in range(1, 2 * moment_count + 2):
+# # if i % 2 == 0:  # i.e. even
+# # moments[i] = estimated_moments[i]
+
+# # breakpoint()
+# return estimated_moments
 
 
 def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
@@ -251,10 +318,28 @@ def get_poly_from_sample(
 
 
 if __name__ == "__main__":
-    dist = D.Normal(0.0, 1.0)
-    sample = dist.sample([4000 ** 2])
-    order = 10
-    checked_moments = get_moments_from_sample(sample, order)[: order + 2]
+    test_moments_from_sample = True
+    use_sobol = False
+    if test_moments_from_sample:
+        dist = D.Normal(0.0, 1.0)
+        # sample = dist.sample([4000 ** 2])
+        sample_size = 20000
+        if use_sobol:
+            sobol = SobolEngine(dimension=1, scramble=True)
+            base_sample = sobol.draw(sample_size)
+            sample = dist.icdf(base_sample).squeeze()[2:]
+        else:
+            sample = dist.sample((sample_size,))
+        order = 15
+        checked_moments = get_moments_from_sample(
+            sample, order + 2
+        )  # [: order + 2]
+        checked_moments_logged = get_moments_from_sample_logged(
+            sample, order + 2
+        )
+        # [
+        # : order + 2
+        # ]
     # print(
     # "Should be like standard normal moments:",
     # )
@@ -263,7 +348,16 @@ if __name__ == "__main__":
     normal_moments = []
     for n in range(1, 2 * order + 2):
         normal_moments.append(gauss_moment(n))
-    normal_moments = torch.Tensor(normal_moments)[: order + 1]
+    normal_moments = torch.cat(
+        (torch.Tensor([1.0]), torch.Tensor(normal_moments)[: order + 1])
+    )
+    # normal_moments[0] = 1.0
+
+    plt.plot(checked_moments, color="red")
+    plt.plot(checked_moments_logged, color="blue")
+    # plt.plot(checked_moments - checked_moments_logged, color="black")
+    plt.plot(normal_moments, color="green")
+    plt.show()
     # breakpoint()
     # print(checked_moments[2:] / normal_moments[1:])
 
