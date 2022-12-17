@@ -81,7 +81,7 @@ class TestBuilders(unittest.TestCase):
         self.sample = distribution.sample((sample_size,))
         sobol = SobolEngine(dimension=1)
         base_sample = sobol.draw(sample_size)
-        # self.sample = D.Normal(0.0, 1.0).icdf(base_sample).squeeze()[2:]
+        self.fixed_sample = D.Normal(0.0, 1.0).icdf(base_sample).squeeze()[2:]
 
         self.end_point = torch.tensor(10.0)
         fineness = 1000
@@ -107,7 +107,8 @@ class TestBuilders(unittest.TestCase):
         self.example_betas = torch.cat(
             (
                 torch.Tensor([1.0]),
-                torch.linspace(1.0, self.order - 1, self.order - 1),
+                # torch.linspace(1.0, self.order - 1, self.order - 1)
+                torch.zeros(self.order - 1),
             )
         )
         self.example_gammas = torch.cat(
@@ -136,11 +137,10 @@ class TestBuilders(unittest.TestCase):
         )
 
     def test_get_gammas_from_sample(self):
-        gammas = get_gammas_from_sample(self.sample, self.order)  # [1:]
-        print(gammas)
-
-        # comparison_gammas = torch.linspace(1.0, self.order - 1, self.order - 1)
+        gammas = get_gammas_from_sample(self.fixed_sample, self.order)  # [1:]
         # breakpoint()
+        # print(gammas)
+
         self.assertTrue(torch.allclose(gammas, self.example_gammas), 5e-2)
 
     def test_get_gammas_from_moments(self):
@@ -265,7 +265,6 @@ class TestBuilders(unittest.TestCase):
 
     def test_get_poly_from_sample(self):
         poly = get_poly_from_sample(self.sample, self.order)
-        # breakpoint()
         for i in range(6):
             with self.subTest(i=i):
                 polyvals = poly(self.input_points, i, None)

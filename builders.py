@@ -494,7 +494,7 @@ def get_gammas_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
     calls to individual functions to construct the necessary
     component in any given situation.
     """
-    return get_gammas_from_moments(
+    return get_gammas_from_moments_gautschi(
         get_moments_from_sample(sample, 2 * order), order
     )
 
