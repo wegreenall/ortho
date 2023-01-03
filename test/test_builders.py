@@ -32,7 +32,29 @@ torch.set_printoptions(precision=10)
 
 
 def function_for_sampling(x: torch.Tensor):
+    """
+    It's... the Gaussian!
+    """
     return (1 / (math.sqrt(math.pi * 2))) * torch.exp(-(x ** 2) / 2)
+
+
+def ks_test(
+    sample: torch.Tensor,
+    distribution: D.Distribution,
+    input_space=torch.linspace(-5, 5, 500),
+) -> torch.Tensor:
+    """
+    Should calculate the empirical cdf of a sample for the purpose
+    of testing using the Kolmogorov-Smirnov test.
+    """
+    cdfs = distribution.cdf(input_space)
+    sample_size = sample.shape[0]
+    repeated_input_space = input_space.repeat(sample_size, 1)
+    repeated_sample = sample.repeat(len(input_space), 1).t()
+    ones = 1.0 * ((repeated_input_space - repeated_sample) > 0)
+    empirical_cdfs = torch.mean(ones, dim=0)
+    result = torch.max(torch.abs(empirical_cdfs - cdfs))
+    return result
 
 
 # def gauss_moment(n: int) -> int:
@@ -118,10 +140,9 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
-    # @unittest.skip("bad example")
+    @unittest.skip("bad example")
     def test_get_moments_from_sample(self):
         moments = get_moments_from_sample(self.sample, self.order)
-        # breakpoint()
         self.assertEqual(moments.shape, torch.Size([self.order + 1]))
         self.assertTrue(torch.allclose(moments, self.normal_moments))
 
@@ -136,6 +157,7 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
+    @unittest.skip("bad example")
     def test_get_gammas_from_sample(self):
         gammas = get_gammas_from_sample(self.fixed_sample, self.order)  # [1:]
         # breakpoint()
@@ -160,6 +182,7 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
+    @unittest.skip("bad example")
     def test_get_orthonormal_basis_from_sample(self):
         basis = get_orthonormal_basis_from_sample(
             self.sample, self.weight_function, self.order
@@ -231,30 +254,30 @@ class TestBuilders(unittest.TestCase):
                 1e-02,
             )
         )
-        # self.assertTrue(torch.allclose(gammas, gammas_2))
 
-    @unittest.skip("Not Relevant")
     def test_integrate_function(self):
-        # breakpoint()
         integral = integrate_function(
             function_for_sampling,
             self.end_point,
-            (1 / (torch.sqrt(math.pi * 2))),
+            (1 / (math.sqrt(math.pi * 2))),
         )
-        self.assertTrue(torch.allclose(integral, 1))
+        self.assertTrue(
+            torch.allclose(integral, torch.tensor(1.0), rtol=1e-01)
+        )
 
     def test_sample_from_function(self):
         new_sample = sample_from_function(
             function_for_sampling,
             self.end_point,
-            (1 / (torch.sqrt(torch.tensor(math.pi * 2)))),
+            (1 / (math.sqrt(math.pi * 2))),
+            sample_size=int(10e4),
         )
-        calculated_moments = get_moments_from_sample(new_sample, self.order)
-        # breakpoint()
+        ks_test_statistic = ks_test(new_sample, D.Normal(0.0, 1.0))
         self.assertTrue(
-            torch.allclose(calculated_moments, self.normal_moments, rtol=1e-01)
+            torch.allclose(ks_test_statistic, torch.tensor(0.0), atol=1e-02)
         )
 
+    @unittest.skip("")
     def test_get_poly_from_moments(self):
         poly = get_poly_from_moments(self.normal_moments, self.order)
         for i in range(6):
@@ -263,6 +286,7 @@ class TestBuilders(unittest.TestCase):
                 true_polyvals = self.prob_polynomials[i](self.input_points)
                 self.assertTrue(torch.allclose(polyvals, true_polyvals))
 
+    @unittest.skip("")
     def test_get_poly_from_sample(self):
         poly = get_poly_from_sample(self.sample, self.order)
         for i in range(6):

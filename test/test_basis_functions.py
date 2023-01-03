@@ -14,16 +14,58 @@ from ortho.basis_functions import (
 from special import hermval
 
 
-@unittest.skip("")
+# @unittest.skip("")
 class TestRandomFourierFeatureBasis(unittest.TestCase):
     def setUp(self):
-        self.order = 20
-        self.dimension = 2
         self.input_size = 100
-        self.spectral_distribution = D.Normal(0.0, 1.0)
+        self.dimension = 1
+        self.order = 1000
+        self.spectral_distribution = D.Normal(
+            torch.Tensor([0.0]), torch.Tensor([1.0])
+        )
         self.random_fourier_basis = RandomFourierFeatureBasis(
             self.dimension, self.order, self.spectral_distribution
         )
+
+    def test_w_shape(self):
+        w = self.random_fourier_basis.get_w()
+        self.assertEqual(w.shape, torch.Size([self.order, self.dimension]))
+
+    def test_b_shape(self):
+        b = self.random_fourier_basis.get_b()
+        self.assertEqual(b.shape, torch.Size([self.order]))
+
+    def test_output_shape(self):
+        # x = torch.ones((self.input_size, self.dimension))
+        x = torch.linspace(-4, 4, self.input_size)
+
+        output = self.random_fourier_basis(x)
+        self.assertEqual(
+            output.shape, torch.Size([self.input_size, self.order])
+        )
+
+
+# @unittest.skip("")
+class TestRandomFourierFeatureBasis2d(unittest.TestCase):
+    def setUp(self):
+        self.input_size = 100
+        self.dimension = 2
+        self.order = 1000
+        self.spectral_distribution = D.Normal(
+            torch.Tensor([0.0, 0.0]), torch.Tensor([1.0, 1.0])
+        )
+        self.random_fourier_basis = RandomFourierFeatureBasis(
+            self.dimension, self.order, self.spectral_distribution
+        )
+
+    def test_w_shape(self):
+        w = self.random_fourier_basis.get_w()
+        self.assertEqual(w.shape, torch.Size([self.order, self.dimension]))
+
+    def test_b_shape(self):
+        b = self.random_fourier_basis.get_b()
+        self.assertEqual(b.shape, torch.Size([self.order]))
+        return
 
     def test_output_shape(self):
         x = torch.ones((self.input_size, self.dimension))
