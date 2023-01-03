@@ -140,12 +140,6 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
-    @unittest.skip("bad example")
-    def test_get_moments_from_sample(self):
-        moments = get_moments_from_sample(self.sample, self.order)
-        self.assertEqual(moments.shape, torch.Size([self.order + 1]))
-        self.assertTrue(torch.allclose(moments, self.normal_moments))
-
     def test_get_betas_from_moments(self):
         moments = self.normal_moments
         betas = get_betas_from_moments(moments, self.order)
@@ -156,14 +150,6 @@ class TestBuilders(unittest.TestCase):
                 1e-02,
             )
         )
-
-    @unittest.skip("bad example")
-    def test_get_gammas_from_sample(self):
-        gammas = get_gammas_from_sample(self.fixed_sample, self.order)  # [1:]
-        # breakpoint()
-        # print(gammas)
-
-        self.assertTrue(torch.allclose(gammas, self.example_gammas), 5e-2)
 
     def test_get_gammas_from_moments(self):
         moments = self.normal_moments
@@ -183,32 +169,18 @@ class TestBuilders(unittest.TestCase):
         )
 
     @unittest.skip("bad example")
-    def test_get_orthonormal_basis_from_sample(self):
-        basis = get_orthonormal_basis_from_sample(
-            self.sample, self.weight_function, self.order
-        )
-        self.assertTrue(isinstance(basis, Basis))
+    def test_get_moments_from_sample(self):
+        moments = get_moments_from_sample(self.sample, self.order)
+        self.assertEqual(moments.shape, torch.Size([self.order + 1]))
+        self.assertTrue(torch.allclose(moments, self.normal_moments))
 
-    @unittest.skip("Not implemented")
-    def test_get_orthonormal_basis(self):
-        basis = get_orthonormal_basis(
-            self.example_betas,
-            self.example_gammas,
-            self.order,
-            self.weight_function,
-        )
+    @unittest.skip("bad example")
+    def test_get_gammas_from_sample(self):
+        gammas = get_gammas_from_sample(self.fixed_sample, self.order)  # [1:]
+        # breakpoint()
+        # print(gammas)
 
-    @unittest.skip("Not implemented")
-    def test_get_symmetric_orthonormal_basis(self):
-        pass
-
-    @unittest.skip("Not implemented")
-    def test_get_weight_function_from_sample(self):
-        pass
-
-    @unittest.skip("Not implemented")
-    def test_get_moments_from_function(self):
-        pass
+        self.assertTrue(torch.allclose(gammas, self.example_gammas), 5e-2)
 
     def test_get_gammas_betas_from_moments(self):
         betas, gammas = get_gammas_betas_from_moments(
@@ -275,6 +247,22 @@ class TestBuilders(unittest.TestCase):
         ks_test_statistic = ks_test(new_sample, D.Normal(0.0, 1.0))
         self.assertTrue(
             torch.allclose(ks_test_statistic, torch.tensor(0.0), atol=1e-02)
+        )
+
+    @unittest.skip("bad example")
+    def test_get_orthonormal_basis_from_sample(self):
+        basis = get_orthonormal_basis_from_sample(
+            self.sample, self.weight_function, self.order
+        )
+        self.assertTrue(isinstance(basis, Basis))
+
+    @unittest.skip("Not implemented")
+    def test_get_orthonormal_basis(self):
+        basis = get_orthonormal_basis(
+            self.example_betas,
+            self.example_gammas,
+            self.order,
+            self.weight_function,
         )
 
     @unittest.skip("")
