@@ -146,6 +146,7 @@ class RandomFourierFeatureBasis(Basis):
         dim: int,
         order: int,
         spectral_distribution: D.Distribution,
+        use_2pi=False,
     ):
         """
         Random Fourier Feature basis for constructing the
@@ -157,9 +158,12 @@ class RandomFourierFeatureBasis(Basis):
         self.w_sample_shape = torch.Size([order])
 
         self.b = self.b_dist.sample(self.b_sample_shape)
-        self.w = self.w_dist.sample(self.w_sample_shape)  # .squeeze(1)
+        self.w = self.w_dist.sample(self.w_sample_shape)  # order x dim
+
         self.order = order
         self.params = None
+
+        self.use_2pi = use_2pi  # mark whether we're multiplying the argument in the cosine by 2π. I think it is necessary!
 
     def __call__(self, x):
         """
@@ -172,9 +176,16 @@ class RandomFourierFeatureBasis(Basis):
 
         n = x.shape[0]
         b = self.b.repeat(n, 1).t()
+
+        """
+        Because the frequencies calculated in the DFT are integer frequencies, 
+        they're essentially pre-scaled by 2 * π. Multiplying
+        the argument in cos(x) by 2π gives all integer frequencies (in radians)
+        meaning you get strong excessive periodic behaviour in the
+        resulting basis functions. 
+        """
         z = (math.sqrt(2.0 / self.order) * torch.cos(self.w @ x.t() + b)).t()
-        # breakpoint()
-        # print(z.shape)
+
         return z
 
     def get_w(self):
@@ -182,6 +193,12 @@ class RandomFourierFeatureBasis(Basis):
         Getter for feature spectral weights.
         """
         return self.w
+
+    def get_b(self):
+        """
+        Getter for feature phase parameters.
+        """
+        return self.b
 
 
 class OrthonormalBasis(Basis):
@@ -519,16 +536,35 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
 
 if __name__ == "__main__":
     # pass
-    dim = 1
-    order = 5000
-    point_count = 1000
-    spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
-    rff = RandomFourierFeatureBasis(dim, order, spectral_distribution)
-    # x = torch.linspace(-1, 1, 100)
-    # x = torch.ones((order, dim))
-    x = torch.linspace(-3, 3, point_count)
+    test_rff_basis = True
+    test_rff_basis_multidim = False
 
-    data = rff(x)
-    # breakpoint()
-    plt.plot(x.numpy().flatten(), torch.sum(data, dim=1).numpy().flatten())
-    plt.show()
+    if test_rff_basis:
+        dim = 1
+        order = 5000
+        point_count = 1000
+        spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
+        rff = RandomFourierFeatureBasis(dim, order, spectral_distribution)
+        # x = torch.linspace(-1, 1, 100)
+        # x = torch.ones((order, dim))
+        x = torch.linspace(-3, 3, point_count)
+
+        data = rff(x)
+        coeffics = D.Normal(0.0, 1.0).sample((order,))
+        breakpoint()
+        gp = coeffics @ data.t()
+
+        # plt.plot(x.numpy().flatten(), data.numpy())
+        plt.plot(x.numpy().flatten(), gp.numpy())
+        plt.show()
+
+    if test_rff_basis_multidim:
+        dim = 2
+        order = 5000
+        point_count = 1000
+        spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
+        # spectral_distribution = D.Normal(0.0, 1.0)
+        rffbasis = RandomFourierFeatureBasis(dim, order, spectral_distribution)
+        x = torch.linspace(-4, 4, point_count)
+        plt.plot(x, rffbasis(x))
+        plt.show()
