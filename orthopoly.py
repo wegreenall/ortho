@@ -102,8 +102,7 @@ class OrthonormalPolynomial(OrthogonalPolynomial):
         """
         WARNING: TESTING for DEG+1 AS THE PRODUCT FOR THE ORTHONORMALISATION
         """
-        # TODO: write test for orthonormality
-        normalising_coefficient = torch.prod(self.gammas[1 : deg + 1])
+        normalising_coefficient = torch.prod(self.gammas[0 : deg + 1])
         return result / torch.sqrt(normalising_coefficient)
 
 

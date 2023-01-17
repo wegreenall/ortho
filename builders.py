@@ -161,7 +161,7 @@ def get_moments_from_sample(
     weight_function=lambda x: torch.ones(x.shape),
 ) -> torch.Tensor:
     """
-    Returns a sequence of _moment_count_ moments calculated from a sample -
+    Returns a sequence of _moment_count_ + 1 moments calculated from a sample -
     including the first element which is the moment of order 0.
 
     Note that the resulting sequence will be of length order + 1, but we need
@@ -173,17 +173,16 @@ def get_moments_from_sample(
     moments = get_moments_from_sample(sample, 20, weight_function)
     """
     stretched_sample = torch.einsum(
-        "i,ij->ij", sample, torch.ones(sample.shape[0], moment_count)
+        "i,ij->ij", sample, torch.ones(sample.shape[0], moment_count + 1)
     )
-    exponents = torch.linspace(1, moment_count, moment_count)
+    exponents = torch.linspace(0, moment_count, moment_count + 1)
     powered_sample = torch.pow(stretched_sample, exponents)
     stretched_weight = torch.einsum(
         "i,ij->ij",
         weight_function(sample),
-        torch.ones(sample.shape[0], moment_count),
+        torch.ones(sample.shape[0], moment_count + 1),
     )
-    moments = torch.mean(powered_sample, axis=0)
-    moments = torch.cat((torch.Tensor([1.0]), moments))
+    moments = torch.mean(powered_sample * stretched_weight, axis=0)
     return moments
 
 
