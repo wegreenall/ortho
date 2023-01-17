@@ -48,21 +48,21 @@ class Basis:
         order: int,
         params: dict = None,
     ):
+        """
+        :param basis function: the basis function to use in this
+        Basis class - i.e., smooth_exponential_basis.
+
+        Expected to have signature:
+        basis_function(x: torch.Tensor,
+                       deg: int,
+                       params: dict) -> torch.Tensor
+
+
+        """
         self.dimension = dimension
         self.order = order
         self.basis_function = basis_function
         self.params = params
-        """
-        :param basis function: the basis function to use in this
-                               Basis class - i.e., smooth_exponential_basis.
-
-                Expected to have signature:
-                                basis_function(x: torch.Tensor,
-                                               deg: int,
-                                               params: dict) -> torch.Tensor
-
-
-        """
         return
 
     def get_dimension(self):
@@ -73,7 +73,7 @@ class Basis:
 
     def get_order(self):
         """
-        Getter method for the dimension of the model.
+        Getter method for the order of the model (i.e. number of basis functions).
         """
         return self.order
 
@@ -81,10 +81,9 @@ class Basis:
         """
         Returns the whole basis evaluated at an input.
 
+        input shape: [x.shape[0], self.dimension]
         output shape: [x.shape[0], self.order]
-
         """
-        # breakpoint()
         # check input shape
         if len(x.shape) <= 1:
             x = x.unsqueeze(-1)
@@ -104,7 +103,6 @@ class Basis:
                 for deg in range(self.order)
             ]
         )
-
         return result
 
     def get_params(self):
@@ -113,7 +111,7 @@ class Basis:
     def __add__(self, other):
         """
         When adding two bases, return a basis that
-        is of the same
+        is of the same order...
         """
         if self.order != other.order:
             raise ValueError(
