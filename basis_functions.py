@@ -104,6 +104,9 @@ class Basis:
     def get_params(self):
         return self.params
 
+    def get_order(self):
+        return self.order
+
 
 class RandomFourierFeatureBasis(Basis):
     def __init__(self, dim: int, order: int):
