@@ -171,8 +171,12 @@ class TestBuilders(unittest.TestCase):
     @unittest.skip("bad example")
     def test_get_moments_from_sample(self):
         moments = get_moments_from_sample(self.sample, self.order)
-        self.assertEqual(moments.shape, torch.Size([self.order + 1]))
+        # self.assertEqual(moments.shape, torch.Size([self.order + 1]))
         self.assertTrue(torch.allclose(moments, self.normal_moments))
+
+    def test_get_moments_from_sample_shape(self):
+        moments = get_moments_from_sample(self.sample, self.order)
+        self.assertEqual(moments.shape, torch.Size([self.order + 1]))
 
     @unittest.skip("bad example")
     def test_get_gammas_from_sample(self):

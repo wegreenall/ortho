@@ -24,13 +24,71 @@ required for building out the Favard kernel.
 # torch.set_default_tensor_type(torch.DoubleTensor)
 
 
-def get_orthonormal_basis_from_sample(
-    input_sample: torch.Tensor, weight_function: Callable, order: int
+def get_orthonormal_basis_from_sample_multidiminprogress(
+    input_sample: torch.Tensor,
+    weight_functions: Callable,
+    order: int,
+    parameters=None,
 ) -> OrthonormalBasis:
+    """
+    Returns an OrthonormalBasis made of a set of functions
+        φ_i = c_i P_i w^{1/2}.
+    For multiple dimensions, it expects a tuple of weight functions
+    of the same size as the number of dimensions,
+    in order to capture the ability to have different functions in
+    different dimensions
+    """
+    if len(input_sample.shape) > 1:
+        dimension = input_sample.shape[-1]
+    else:
+        dimension = 1
+
+    if isinstance(weight_functions, Callable):
+        weight_functions = (weight_functions,)
+
+    if len(weight_functions) != dimension:
+        raise ValueError(
+            "The number of weight functions passed in must match the dimension parameter"
+        )
+
+    polynomials = []
+    for d in range(dimension):
+        betas, gammas = get_gammas_betas_from_moments(
+            get_moments_from_sample(
+                input_sample[:, d], 2 * order, weight_functions[d]
+            ),
+            order,
+        )
+        polynomials.append(OrthonormalPolynomial(order, betas, gammas))
+    return OrthonormalBasis(
+        polynomials, weight_functions, dimension, order, parameters
+    )
+
+
+"""
+ONE DIMENSIONAL VERSION TO BE SAVED
+"""
+
+
+def get_orthonormal_basis_from_sample(
+    input_sample: torch.Tensor,
+    weight_function: Callable,
+    order: int,
+    parameters=None,
+) -> OrthonormalBasis:
+    """
+    Returns an OrthonormalBasis made of a set of functions
+        φ_i = c_i P_i w^{1/2}.
+    For multiple dimensions, it expects a tuple of weight functions
+    of the same size as the number of dimensions,
+    in order to capture the ability to have different functions in
+    different dimensions
+    """
     betas, gammas = get_gammas_betas_from_moments(
         get_moments_from_sample(input_sample, 2 * order, weight_function),
         order,
     )
+
     poly = OrthonormalPolynomial(order, betas, gammas)
     return OrthonormalBasis(poly, weight_function, 1, order)
 
