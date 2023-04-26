@@ -285,10 +285,12 @@ class OrthonormalBasis(Basis):
         can be applied "outside" the tensor of orthogonal polynomials,
         so it is feasible to do this separately (and therefore faster).
         """
+        if len(x.shape) == 1:
+            x = x.unsqueeze(1)
         ortho_poly_basis = super()._get_intermediate_result(x)
         for d, weight_function in enumerate(self.weight_functions):
             weights = torch.sqrt(
-                weight_function(x)
+                weight_function(x[:, d])
             ).squeeze()  # the weight function is per-dimension
             # breakpoint()
             try:
@@ -296,6 +298,7 @@ class OrthonormalBasis(Basis):
             except:
                 print("ERRORED!")
                 breakpoint()
+        # now that we have the
         reshaped_ortho_basis = reshaping(ortho_poly_basis)
         result = torch.reshape(
             reshaped_ortho_basis, (x.shape[0], self.order ** self.dimension)
@@ -311,10 +314,10 @@ class OrthonormalBasis(Basis):
         Updates the gammas on the basis function and the
         weight function.
         """
-        for basis_function in self.basis_functions:
-            basis_function.set_gammas(gammas)
-        for weight_function in self.weight_functions:
-            weight_function.set_gammas(gammas)
+        for i, basis_function in enumerate(self.basis_functions):
+            basis_function.set_gammas(gammas[:, i])
+        for i, weight_function in enumerate(self.weight_functions):
+            weight_function.set_gammas(gammas[:, i])
 
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
