@@ -21,10 +21,8 @@ This file contains builder functions for various components
 required for building out the Favard kernel.
 """
 
-# torch.set_default_tensor_type(torch.DoubleTensor)
 
-
-def get_orthonormal_basis_from_sample_multidiminprogress(
+def get_orthonormal_basis_from_sample_multidim(
     input_sample: torch.Tensor,
     weight_functions: Callable,
     order: int,
@@ -84,7 +82,7 @@ def get_orthonormal_basis_from_sample(
     in order to capture the ability to have different functions in
     different dimensions
     """
-    betas, gammas = get_gammas_betas_from_moments(
+    betas, gammas = get_gammas_betas_from_moments_gautschi(
         get_moments_from_sample(input_sample, 2 * order, weight_function),
         order,
     )
@@ -179,7 +177,6 @@ def get_moments_from_sample_logged(
     powered_sample = torch.exp(logged_powered_sample) * signs  # ** exponents
     moments = torch.mean(powered_sample, axis=0)
     # moments = torch.cat((torch.Tensor([1.0]), moments))
-    # breakpoint()
     return moments
 
 
@@ -231,14 +228,14 @@ def get_moments_from_sample(
     moments = get_moments_from_sample(sample, 20, weight_function)
     """
     stretched_sample = torch.einsum(
-        "i,ij->ij", sample, torch.ones(sample.shape[0], moment_count + 1)
+        "i,ij->ij", sample, torch.ones(sample.shape[0], moment_count)
     )
-    exponents = torch.linspace(0, moment_count, moment_count + 1)
+    exponents = torch.linspace(0, moment_count - 1, moment_count)
     powered_sample = torch.pow(stretched_sample, exponents)
     stretched_weight = torch.einsum(
         "i,ij->ij",
         weight_function(sample),
-        torch.ones(sample.shape[0], moment_count + 1),
+        torch.ones(sample.shape[0], moment_count),
     )
     moments = torch.mean(powered_sample * stretched_weight, axis=0)
     return moments
@@ -293,13 +290,11 @@ def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
     assert (
         len(moments) >= 2 * order
     ), "Please provide at least 2 * order moments. Don't forget to include the zeroth moment"
-    # breakpoint()
     for i in range(order):
         hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)  # [1:, :]
         dets[i + 2] = torch.linalg.det(hankel_matrix)
 
     gammas = dets[:-2] * dets[2:] / (dets[1:-1] ** 2)
-    # breakpoint()
     return gammas
 
 
@@ -374,7 +369,7 @@ def get_betas_from_moments_gautschi(
         On Generating Orthogonal Polynomials (1982). (section 2.3)
 
     """
-    betas, _ = get_gammas_betas_from_moments(moments, order)
+    betas, _ = get_gammas_betas_from_moments_gautschi(moments, order)
     return betas
 
 
@@ -392,7 +387,7 @@ def get_gammas_from_moments_gautschi(
         On Generating Orthogonal Polynomials (1982). (section 2.3)
 
     """
-    _, gammas = get_gammas_betas_from_moments(moments, order)
+    _, gammas = get_gammas_betas_from_moments_gautschi(moments, order)
     return gammas
 
 
@@ -415,13 +410,13 @@ def get_gammas_betas_from_moments_gautschi(
     betas = torch.zeros(order)
     gammas = torch.zeros(order)
     sigma = torch.zeros(2 * order, 2 * order)
-    sigma[0, :] = 0
+    # sigma[0, :] = 0
+    # sigma[0, :] = moments
+    # breakpoint()
     sigma[0, :] = moments
     betas[0] = moments[1] / moments[0]
     gammas[0] = moments[0]
 
-    # breakpoint()
-    # continuation
     for k in range(1, order):
         for l in range(k, 2 * order - k - 1):
             sigma[k, l] = (
@@ -491,7 +486,6 @@ def get_gammas_betas_from_modified_moments_gautschi(
         On Generating Orthogonal Polynomials (1982). (section 2.3)
 
     """
-    # breakpoint()
     # initialisation
     input_betas = polynomial.get_betas()
     input_gammas = polynomial.get_gammas()
