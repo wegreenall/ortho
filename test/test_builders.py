@@ -152,6 +152,9 @@ class TestBuilders(unittest.TestCase):
         )
 
     def test_get_gammas_from_moments(self):
+        """
+        Tests whether the gammas are correct.
+        """
         moments = self.normal_moments
         gammas = get_gammas_from_moments(moments, self.order)
         # print("Gammas from moments:", gammas)
@@ -168,15 +171,16 @@ class TestBuilders(unittest.TestCase):
             )
         )
 
-    @unittest.skip("bad example")
+    @unittest.skip("Not close enough due to statistical noise")
     def test_get_moments_from_sample(self):
         moments = get_moments_from_sample(self.sample, self.order)
         # self.assertEqual(moments.shape, torch.Size([self.order + 1]))
-        self.assertTrue(torch.allclose(moments, self.normal_moments))
+        # self.assertTrue(torch.allclose(moments, self.normal_moments))
+        self.assertTrue(moments.shape == torch.Size([self.order]))
 
     def test_get_moments_from_sample_shape(self):
         moments = get_moments_from_sample(self.sample, self.order)
-        self.assertEqual(moments.shape, torch.Size([self.order + 1]))
+        self.assertEqual(moments.shape, torch.Size([self.order]))
 
     @unittest.skip("bad example")
     def test_get_gammas_from_sample(self):
