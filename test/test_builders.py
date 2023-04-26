@@ -97,7 +97,22 @@ def double_fact(n: int) -> int:
         return n * double_fact(n - 2)
 
 
-class TestOrthoBuilderInterim(unittest.TestCase):
+class TestOrthoBuilderGetPolynomials(unittest.TestCase):
+    def setUp(self):
+        self.order = 5
+        self.builder = OrthoBuilder(self.order)
+        self.sample_size = 1000
+        self.sample = D.Normal(0.0, 1.0).sample((self.sample_size,))
+        self.moments = torch.Tensor([1.0] * (2 * self.order + 1))
+
+        self.betas = torch.Tensor([0.0, 0.0, 0.0, 0.0, 0.0])
+        self.gammas = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+        self.orthogonal_polynomial = OrthogonalPolynomial(
+            self.order, self.betas, self.gammas
+        )
+
+
+class TestOrthoBuilderStatesErrors(unittest.TestCase):
     def setUp(self):
         self.order = 5
         self.builder = OrthoBuilder(self.order)
@@ -112,9 +127,7 @@ class TestOrthoBuilderInterim(unittest.TestCase):
         )
 
     def test_set_sample_state(self):
-        # breakpoint()
         self.builder.set_sample(self.sample)
-        # breakpoint()
         self.assertEqual(self.builder.state, OrthoBuilderState.BETAS_GAMMAS)
 
     def test_set_moments(self):
