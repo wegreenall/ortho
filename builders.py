@@ -15,11 +15,222 @@ from typing import Callable
 from torch.quasirandom import SobolEngine
 import matplotlib.pyplot as plt
 from termcolor import colored
+from typing import Tuple, Union
+from enum import Enum
 
 """
 This file contains builder functions for various components
 required for building out the Favard kernel.
 """
+
+
+class OrthoDataStore:
+    def __init__(self, dim=1):
+        self.dim = dim
+        self.sample = None
+        self.moments = None
+        self.weight_function = None
+
+
+class OrthoBuilderState(Enum):
+    """
+    Enum for the state of the builder.
+    """
+
+    EMPTY = 0
+    SAMPLE = 1
+    MOMENTS = 2
+    BETAS_GAMMAS = 4
+
+
+class OrthoBuilder:
+    def __init__(self, order, dim=1):
+        """
+        This class is a combination Builder and Factory
+        for the various forms of Orthogonal polynomial that one
+        might want.
+
+        It operates as a state machine that maintains an indexing state for
+        the data that is available. For example, if you set a sample, the class
+        will automatically calculate the moments and set the state to MOMENTS,
+        then calculate the betas and gammas and set the state to BETAS_GAMMAS.
+        This way, we can avoid misguided setting.
+        """
+        self.dim = dim
+        self.order = order
+
+        # state holder
+        self.state = OrthoBuilderState.EMPTY
+
+        # data
+        self.sample = None
+        self.moments = None
+        self.weight_function = None
+        self.modifying_polynomial = None
+
+        # parameters
+        self.betas = None
+        self.gammas = None
+
+    def set_sample(self, sample: torch.Tensor):
+        """
+        External setter for sample.
+        Since moments are aggregated from the sample,
+        this method also sets the moments.
+
+        Builder method: returns self.
+        """
+        if self.state == OrthoBuilderState.EMPTY:
+            self.sample = sample
+            self.state = OrthoBuilderState.SAMPLE
+            return self.set_moments(None)
+        else:
+            raise ValueError(
+                "Moments have already been set; adding moments is inconsistent"
+            )
+
+    def set_moments(self, moments: Union[torch.Tensor, None]):
+        """
+        External setter for moments.
+
+        Builder method: returns self.
+        """
+        if self.state == OrthoBuilderState.SAMPLE:
+            self.moments = get_moments_from_sample(self.sample, self.order)
+            self.state = OrthoBuilderState.MOMENTS
+            return self.set_betas_and_gammas(None, None)
+        elif self.state == OrthoBuilderState.EMPTY:
+            self.moments = moments
+            return self.set_betas_and_gammas(None, None)
+
+    def set_betas_and_gammas(
+        self,
+        betas: Union[torch.Tensor, None],
+        gammas: Union[torch.Tensor, None],
+    ):
+        """
+        Setter for betas and gammas.
+
+        if a modifying polynomial has been set, this will produce
+        the "modified moments" betas and gammas as described
+        in the Gautschi paper.
+
+        Builder method: returns self.
+        """
+        if self.state == OrthoBuilderState.MOMENTS:
+            if self._check_modifying_polynomial():
+                get_gammas_betas_from_modified_moments_gautschi(
+                    self.moments, self.order, self.modifying_polynomial
+                )
+            else:
+                self.betas, self.gammas = get_gammas_betas_from_moments(
+                    self.moments, self.order
+                )
+            self.state = OrthoBuilderState.BETAS_GAMMAS
+            return self
+        elif self.state == OrthoBuilderState.EMPTY:
+            self.betas, self.gammas = betas, gammas
+        else:
+            raise ValueError(
+                "Tried to set betas and gammas but not empty.\
+                             State is: {}".format(
+                    self.state
+                )
+            )
+
+    def set_weight_function(self, weight_function: Callable):
+        """
+        External setter for weight_function.
+
+        Builder method: returns self.
+        """
+        self.weight_function = weight_function
+        return self
+
+    def set_modifying_polynomial(
+        self, modifying_polynomial: OrthogonalPolynomial
+    ):
+        """
+        External setter for modifying_polynomial.
+
+        Builder method: returns self.
+        """
+        self.modifying_polynomial = modifying_polynomial
+        return self
+
+    def _check_weight_function(self) -> bool:
+        return self.weight_function is not None
+
+    def _check_modifying_polynomial(self) -> bool:
+        return self.modifying_polynomial is not None
+
+    def get_orthonormal_basis(self) -> OrthonormalBasis:
+        """
+        If the builders is ready (i.e. has betas and gammas AND weight
+        function), we can build an orthonormal basis.
+        """
+        if (
+            self._check_weight_function()
+            and self.state == OrthoBuilderState.BETAS_GAMMAS
+        ):  # i.e. we're ready
+            return OrthonormalBasis(
+                OrthonormalPolynomial(self.dim, self.betas, self.gammas),
+                self.weight_function,
+            )
+        else:
+            raise ValueError(
+                "Not ready to build orthonormal basis. Current State: {} ".format(
+                    self.state
+                )
+            )
+
+    def get_orthogonal_basis(self) -> OrthogonalPolynomial:
+        """
+        If the builders is ready (i.e. has betas and gammas)
+        and has a weight function, we can build an orthgonal basis
+        """
+        if self.state == OrthoBuilderState.BETAS_GAMMAS:
+            return OrthogonalPolynomial(self.dim, self.betas, self.gammas)
+        else:
+            raise ValueError(
+                "Not ready to build orthogonal polynomial. Current State: {} ".format(
+                    self.state
+                )
+            )
+
+    def get_orthonormal_polynomial(self) -> OrthonormalPolynomial:
+        if self.state == OrthoBuilderState.BETAS_GAMMAS:
+            return OrthonormalPolynomial(self.dim, self.betas, self.gammas)
+        else:
+            raise ValueError(
+                "Not ready to build orthonormal polynomial. Current State: {} ".format(
+                    self.state
+                )
+            )
+
+    def get_symmetric_orthonormal_polynomial(
+        self,
+    ) -> SymmetricOrthonormalPolynomial:
+        if self.state == OrthoBuilderState.BETAS_GAMMAS:
+            return SymmetricOrthonormalPolynomial(self.dim, self.gammas)
+        else:
+            raise ValueError(
+                "Not ready to build symmetric orthonormal polynomial. Current State: {} ".format(
+                    self.state
+                )
+            )
+
+    def get_symmetric_orthogonal_polynomial(
+        self,
+    ) -> SymmetricOrthogonalPolynomial:
+        if self.state == OrthoBuilderState.BETAS_GAMMAS:
+            return SymmetricOrthogonalPolynomial(self.dim, self.gammas)
+        else:
+            raise ValueError(
+                "Not ready to build symmetric orthogonal polynomial. Current State: {} ".format(
+                    self.state
+                )
+            )
 
 
 def get_orthonormal_basis_from_sample_multidim(
@@ -474,7 +685,7 @@ def get_gammas_from_modified_moments_gautschi(
 
 def get_gammas_betas_from_modified_moments_gautschi(
     moments: torch.Tensor, order: int, polynomial: OrthogonalPolynomial
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Accepts a tensor containing the moments from a given
     distribution, and generates the gammas that correspond to them;
