@@ -1,6 +1,8 @@
 import torch
 import torch.distributions as D
 from ortho.builders import (
+    OrthoBuilder,
+    OrthoBuilderState,
     get_weight_function_from_sample,
     get_moments_from_function,
     get_moments_from_sample,
@@ -17,7 +19,7 @@ from ortho.builders import (
     get_orthonormal_basis,
     get_orthonormal_basis_from_sample,
 )
-from ortho.basis_functions import Basis
+from ortho.basis_functions import Basis, OrthogonalPolynomial
 from ortho.polynomials import ProbabilistsHermitePolynomial
 import math
 from torch.quasirandom import SobolEngine
@@ -93,6 +95,81 @@ def double_fact(n: int) -> int:
         return 1
     else:
         return n * double_fact(n - 2)
+
+
+class TestOrthoBuilderInterim(unittest.TestCase):
+    def setUp(self):
+        self.order = 5
+        self.builder = OrthoBuilder(self.order)
+        self.sample_size = 1000
+        self.sample = D.Normal(0.0, 1.0).sample((self.sample_size,))
+        self.moments = torch.Tensor([1.0] * (2 * self.order + 1))
+
+        self.betas = torch.Tensor([0.0, 0.0, 0.0, 0.0, 0.0])
+        self.gammas = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+        self.orthogonal_polynomial = OrthogonalPolynomial(
+            self.order, self.betas, self.gammas
+        )
+
+    def test_set_sample_state(self):
+        # breakpoint()
+        self.builder.set_sample(self.sample)
+        # breakpoint()
+        self.assertEqual(self.builder.state, OrthoBuilderState.BETAS_GAMMAS)
+
+    def test_set_moments(self):
+        self.assertEqual(self.builder.state, OrthoBuilderState.EMPTY)
+        self.builder.set_moments(self.moments)
+        self.assertEqual(self.builder.state, OrthoBuilderState.BETAS_GAMMAS)
+
+    def test_error_state_sample(self):
+        self.builder.set_sample(self.sample)
+        with self.assertRaises(ValueError):
+            self.builder.set_betas_and_gammas(self.betas, self.gammas)
+
+    def test_error_state_moments(self):
+        self.builder.state = OrthoBuilderState.SAMPLE
+        with self.assertRaises(AssertionError):
+            self.builder.set_moments(self.moments)
+
+    def test_error_orthogonal_polynomial_generation(self):
+        self.assertEqual(self.builder.state, OrthoBuilderState.EMPTY)
+        with self.assertRaises(ValueError):
+            self.builder.get_orthogonal_polynomial()
+
+    def test_error_orthonormal_polynomial_generation(self):
+        self.assertEqual(self.builder.state, OrthoBuilderState.EMPTY)
+        with self.assertRaises(ValueError):
+            self.builder.get_orthonormal_polynomial()
+
+    def test_error_orthonormal_basis_generation(self):
+        self.assertEqual(self.builder.state, OrthoBuilderState.EMPTY)
+        with self.assertRaises(ValueError):
+            self.builder.get_orthonormal_basis()
+
+    def test_error_symmetric_orthogonal_polynomial_generation(self):
+        self.assertEqual(self.builder.state, OrthoBuilderState.EMPTY)
+        with self.assertRaises(ValueError):
+            self.builder.get_symmetric_orthogonal_polynomial()
+
+    def test_error_symmetric_orthonormal_polynomial_generation(self):
+        self.assertEqual(self.builder.state, OrthoBuilderState.EMPTY)
+        with self.assertRaises(ValueError):
+            self.builder.get_symmetric_orthonormal_polynomial()
+
+    @unittest.skip("Not implemented yet - add OrthogonalPolynomial")
+    def test_modified_moments(self):
+        # (
+        # self.builder.
+        # .set_moments(self.moments)
+        # )
+        (
+            self.builder.set_modifying_polynomial(
+                self.orthogonal_polynomial
+            ).set_moments(self.moments)
+        )
+        self.assertEqual(self.builder.state, OrthoBuilderState.BETAS_GAMMAS)
+        # self.builders.
 
 
 class TestBuilders(unittest.TestCase):

@@ -96,12 +96,16 @@ class OrthoBuilder:
         Builder method: returns self.
         """
         if self.state == OrthoBuilderState.SAMPLE:
-            self.moments = get_moments_from_sample(self.sample, self.order)
-            self.state = OrthoBuilderState.MOMENTS
-            return self.set_betas_and_gammas(None, None)
+            assert (
+                moments is None
+            ), "Sample has already been set, don't set moments as well"
+            self.moments = get_moments_from_sample(self.sample, 2 * self.order)
         elif self.state == OrthoBuilderState.EMPTY:
             self.moments = moments
-            return self.set_betas_and_gammas(None, None)
+
+        # update the state and progress to the next stage.
+        self.state = OrthoBuilderState.MOMENTS
+        return self.set_betas_and_gammas(None, None)
 
     def set_betas_and_gammas(
         self,
@@ -126,8 +130,6 @@ class OrthoBuilder:
                 self.betas, self.gammas = get_gammas_betas_from_moments(
                     self.moments, self.order
                 )
-            self.state = OrthoBuilderState.BETAS_GAMMAS
-            return self
         elif self.state == OrthoBuilderState.EMPTY:
             self.betas, self.gammas = betas, gammas
         else:
@@ -137,6 +139,9 @@ class OrthoBuilder:
                     self.state
                 )
             )
+        assert self.betas is not None and self.gammas is not None
+        self.state = OrthoBuilderState.BETAS_GAMMAS
+        return self
 
     def set_weight_function(self, weight_function: Callable):
         """
@@ -184,7 +189,7 @@ class OrthoBuilder:
                 )
             )
 
-    def get_orthogonal_basis(self) -> OrthogonalPolynomial:
+    def get_orthogonal_polynomial(self) -> OrthogonalPolynomial:
         """
         If the builders is ready (i.e. has betas and gammas)
         and has a weight function, we can build an orthgonal basis
@@ -208,18 +213,6 @@ class OrthoBuilder:
                 )
             )
 
-    def get_symmetric_orthonormal_polynomial(
-        self,
-    ) -> SymmetricOrthonormalPolynomial:
-        if self.state == OrthoBuilderState.BETAS_GAMMAS:
-            return SymmetricOrthonormalPolynomial(self.dim, self.gammas)
-        else:
-            raise ValueError(
-                "Not ready to build symmetric orthonormal polynomial. Current State: {} ".format(
-                    self.state
-                )
-            )
-
     def get_symmetric_orthogonal_polynomial(
         self,
     ) -> SymmetricOrthogonalPolynomial:
@@ -228,6 +221,18 @@ class OrthoBuilder:
         else:
             raise ValueError(
                 "Not ready to build symmetric orthogonal polynomial. Current State: {} ".format(
+                    self.state
+                )
+            )
+
+    def get_symmetric_orthonormal_polynomial(
+        self,
+    ) -> SymmetricOrthonormalPolynomial:
+        if self.state == OrthoBuilderState.BETAS_GAMMAS:
+            return SymmetricOrthonormalPolynomial(self.dim, self.gammas)
+        else:
+            raise ValueError(
+                "Not ready to build symmetric orthonormal polynomial. Current State: {} ".format(
                     self.state
                 )
             )
