@@ -13,7 +13,9 @@ for getting the measure/weight function.
 
 
 class OrthogonalPolynomial:
-    def __init__(self, order, betas, gammas, leading=1):
+    def __init__(
+        self, order: int, betas: torch.Tensor, gammas: torch.Tensor, leading=1
+    ):
         """
         A system of orthogonal polynomials has the property that:
 
@@ -132,7 +134,7 @@ class OrthogonalBasisFunction(OrthogonalPolynomial):
 
 
 class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
-    def __init__(self, order, gammas):
+    def __init__(self, order: int, gammas: torch.Tensor):
         """
         If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
         then there exist coefficients γ_n != 0 for n>=1, s.t.
@@ -146,7 +148,7 @@ class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
 
 
 class SymmetricOrthonormalPolynomial(OrthonormalPolynomial):
-    def __init__(self, order, gammas):
+    def __init__(self, order: int, gammas: torch.Tensor):
         """
         If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
         then there exist coefficients γ_n != 0 for n>=1, s.t.

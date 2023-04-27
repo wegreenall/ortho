@@ -19,7 +19,13 @@ from ortho.builders import (
     get_orthonormal_basis,
     get_orthonormal_basis_from_sample,
 )
-from ortho.basis_functions import Basis, OrthogonalPolynomial
+from ortho.basis_functions import Basis
+from ortho.orthopoly import (
+    OrthogonalPolynomial,
+    OrthonormalPolynomial,
+    SymmetricOrthogonalPolynomial,
+    SymmetricOrthonormalPolynomial,
+)
 from ortho.polynomials import ProbabilistsHermitePolynomial
 import math
 from torch.quasirandom import SobolEngine
@@ -106,10 +112,63 @@ class TestOrthoBuilderGetPolynomials(unittest.TestCase):
         self.moments = torch.Tensor([1.0] * (2 * self.order + 1))
 
         self.betas = torch.Tensor([0.0, 0.0, 0.0, 0.0, 0.0])
-        self.gammas = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+        self.gammas = torch.Tensor([1.0, 1.0, 2.0, 3.0, 4.0])
+
         self.orthogonal_polynomial = OrthogonalPolynomial(
             self.order, self.betas, self.gammas
         )
+
+    def test_get_orthogonal_polynomial(self):
+        orthogonal_polynomial = self.builder.set_betas_and_gammas(
+            self.betas, self.gammas
+        ).get_orthogonal_polynomial()
+        self.assertTrue(orthogonal_polynomial.order == self.order)
+        self.assertTrue(
+            isinstance(orthogonal_polynomial, OrthogonalPolynomial)
+        )
+
+    def test_get_orthonormal_polynomial(self):
+        orthonormal_polynomial = self.builder.set_betas_and_gammas(
+            self.betas, self.gammas
+        ).get_orthonormal_polynomial()
+        self.assertTrue(orthonormal_polynomial.order == self.order)
+        self.assertTrue(
+            isinstance(orthonormal_polynomial, OrthonormalPolynomial)
+        )
+
+    def test_get_orthonormal_basis(self):
+        orthonormal_basis = (
+            self.builder.set_betas_and_gammas(self.betas, self.gammas)
+            .set_weight_function(lambda x: torch.exp(-(x ** 2) / 2))
+            .get_orthonormal_basis()
+        )
+        self.assertTrue(orthonormal_basis.order == self.order)
+        self.assertTrue(isinstance(orthonormal_basis, Basis))
+
+    def test_get_symmetric_orthogonal_polynomial(self):
+        symmetric_orthogonal_polynomial = self.builder.set_betas_and_gammas(
+            self.betas, self.gammas
+        ).get_symmetric_orthogonal_polynomial()
+        self.assertTrue(symmetric_orthogonal_polynomial.order == self.order)
+        self.assertTrue(
+            isinstance(
+                symmetric_orthogonal_polynomial, SymmetricOrthogonalPolynomial
+            )
+        )
+
+    def test_get_symmetric_orthonormal_polynomial(self):
+        symmetric_orthonormal_polynomial = self.builder.set_betas_and_gammas(
+            self.betas, self.gammas
+        ).get_symmetric_orthonormal_polynomial()
+        self.assertTrue(symmetric_orthonormal_polynomial.order == self.order)
+        self.assertTrue(
+            isinstance(
+                symmetric_orthonormal_polynomial,
+                SymmetricOrthonormalPolynomial,
+            )
+        )
+
+        pass
 
 
 class TestOrthoBuilderStatesErrors(unittest.TestCase):

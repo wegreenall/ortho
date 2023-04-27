@@ -215,7 +215,7 @@ class RandomFourierFeatureBasis(Basis):
 
         self.use_2pi = use_2pi  # mark whether we're multiplying the argument in the cosine by 2π. I think it is necessary!
 
-    def __call__(self, x):
+    def __call__(self, x: torch.Tensor):
         """
         Returns the value of these random features evaluated at the inputs x.
 
