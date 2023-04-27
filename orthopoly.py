@@ -155,7 +155,8 @@ class SymmetricOrthonormalPolynomial(OrthonormalPolynomial):
                 P_{n+1} = xP_n(x) - γ_nP_{n-1}
 
         with initial conditions P_0(x) = 1 and P_1(x) = x
-        This is equivalent to a polynomial sequence with β_n = 0 for each n
+        This is equivalent to an orthogonal polynomial sequence with β_n = 0
+        for each n.
         """
         betas = torch.zeros(order)
         super().__init__(order, betas, gammas)
