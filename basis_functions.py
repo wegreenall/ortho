@@ -627,8 +627,12 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
 
 if __name__ == "__main__":
     # pass
+    test_fasshauer_basis = True
     test_rff_basis = True
     test_rff_basis_multidim = False
+
+    if test_fasshauer_basis:
+        basis = Basis()
 
     if test_rff_basis:
         dim = 1
