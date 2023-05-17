@@ -63,7 +63,7 @@ class Basis:
         basis_functions: Union[Callable, Tuple[Callable]],
         dimension: int,
         order: int,
-        parameters: dict = None,
+        parameters: dict,
     ):
         """
         :param basis_functions: either a Callable function, w/ signature:
@@ -150,7 +150,7 @@ class Basis:
 
         potential_result = reshaping(result)
         result = torch.reshape(
-            potential_result, (x.shape[0], self.order ** self.dimension)
+            potential_result, (x.shape[0], self.order**self.dimension)
         )
 
         if self.dimension == 1:
@@ -301,7 +301,7 @@ class OrthonormalBasis(Basis):
         # now that we have the
         reshaped_ortho_basis = reshaping(ortho_poly_basis)
         result = torch.reshape(
-            reshaped_ortho_basis, (x.shape[0], self.order ** self.dimension)
+            reshaped_ortho_basis, (x.shape[0], self.order**self.dimension)
         )
 
         if self.dimension == 1:
@@ -461,7 +461,7 @@ def smooth_exponential_basis_fasshauer(
         a = torch.diag(params["precision_parameter"])  # precision parameter
         b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     # of the measure w.r.t the hermite functions are orthogonal
-    c = torch.sqrt(a ** 2 + 2 * a * b)
+    c = torch.sqrt(a**2 + 2 * a * b)
     # sigma = torch.sqrt(params["variance_parameter"])
     if (c != c).any():
         print("c in fasshauer is NaN!")
@@ -499,7 +499,7 @@ def smooth_exponential_eigenvalues_fasshauer(order: int, params: dict):
     """
     b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     a = torch.diag(params["precision_parameter"])  # precision
-    c = torch.sqrt(a ** 2 + 2 * a * b)
+    c = torch.sqrt(a**2 + 2 * a * b)
     left_term = torch.sqrt(2 * a / (a + b + c))
     right_term = b / (a + b + c)
 
@@ -525,7 +525,7 @@ def get_linear_coefficients_fasshauer(
     """
     b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     a = torch.diag(params["precision_parameter"])  # precision
-    c = torch.sqrt(a ** 2 + 2 * a * b)
+    c = torch.sqrt(a**2 + 2 * a * b)
 
     basis_intercept = intercept * torch.pow(a / c, 0.25)
     basis_slope = 0.5 * slope * torch.pow(a, 0.25) / torch.pow(c, 0.75)
@@ -599,7 +599,7 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
         )
 
     # define weight function
-    weight_term = torch.pow(1 - z ** 2, weight_power)
+    weight_term = torch.pow(1 - z**2, weight_power)
     if (chebyshev_term != chebyshev_term).any():
         raise ValueError(
             "Chebyshev returning NaNs. Ensure"
