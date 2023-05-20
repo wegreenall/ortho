@@ -13,7 +13,9 @@ for getting the measure/weight function.
 
 
 class OrthogonalPolynomial:
-    def __init__(self, order, betas, gammas, leading=1):
+    def __init__(
+        self, order: int, betas: torch.Tensor, gammas: torch.Tensor, leading=1
+    ):
         """
         A system of orthogonal polynomials has the property that:
 
@@ -102,8 +104,7 @@ class OrthonormalPolynomial(OrthogonalPolynomial):
         """
         WARNING: TESTING for DEG+1 AS THE PRODUCT FOR THE ORTHONORMALISATION
         """
-        # TODO: write test for orthonormality
-        normalising_coefficient = torch.prod(self.gammas[1 : deg + 1])
+        normalising_coefficient = torch.prod(self.gammas[0 : deg + 1])
         return result / torch.sqrt(normalising_coefficient)
 
 
@@ -133,7 +134,7 @@ class OrthogonalBasisFunction(OrthogonalPolynomial):
 
 
 class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
-    def __init__(self, order, gammas):
+    def __init__(self, order: int, gammas: torch.Tensor):
         """
         If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
         then there exist coefficients γ_n != 0 for n>=1, s.t.
@@ -147,14 +148,15 @@ class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
 
 
 class SymmetricOrthonormalPolynomial(OrthonormalPolynomial):
-    def __init__(self, order, gammas):
+    def __init__(self, order: int, gammas: torch.Tensor):
         """
         If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
         then there exist coefficients γ_n != 0 for n>=1, s.t.
                 P_{n+1} = xP_n(x) - γ_nP_{n-1}
 
         with initial conditions P_0(x) = 1 and P_1(x) = x
-        This is equivalent to a polynomial sequence with β_n = 0 for each n
+        This is equivalent to an orthogonal polynomial sequence with β_n = 0
+        for each n.
         """
         betas = torch.zeros(order)
         super().__init__(order, betas, gammas)

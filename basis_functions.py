@@ -10,7 +10,7 @@ import torch.distributions as D
 
 # from framework import special, utils
 from ortho.polynomials import chebyshev_first, chebyshev_second
-from typing import Callable
+from typing import Callable, Union, Tuple
 
 from ortho.special import hermite_function
 
@@ -28,10 +28,6 @@ polynomial that corresponds to that function)
 params:  a dictionary of parameters that contains the appropriate titles etc.
 for that set of polynomials.
 
-Default versions or generator functions
-can be created here to allow for ease of use. (i.e. available here and not
-necessary to hand-tune every time
-
 Return value must be a torch.Tensor of dimension [n] only;
 not [n, 1] as is the inputs vector - this reflects explicitly that the output
 would be 1-d (2-d inputs would be of shape [n,2]). The result of this is that
@@ -40,29 +36,69 @@ formulation of an orthonormal basis.
 """
 
 
+def reshaping(tensors: torch.Tensor):
+    """For a N x m x d tensor, returns the einsum resulting from:
+    torch.einsum("na, nb, nc, nd -> nabcd", tensor[:,:,0], tensor[:,:,1], tensor[:,:,2], tensor[:,:,3])
+    """
+    einsum_string = ""
+    used_chars = ""
+    i = 0
+    for i in range(len(tensors) - 1):
+        einsum_string += "n" + chr(ord("a") + i) + ","
+        used_chars += chr(ord("a") + i)
+    einsum_string += (
+        "n"
+        + chr(ord("a") + i + 1)
+        + "-> n"
+        + used_chars
+        + chr(ord("a") + i + 1)
+    )
+    result = torch.einsum(einsum_string, *tensors)
+    return result
+
+
 class Basis:
     def __init__(
         self,
-        basis_function: Callable,
+        basis_functions: Union[Callable, Tuple[Callable]],
         dimension: int,
         order: int,
-        params: dict = None,
+        parameters: dict,
     ):
+        """
+        :param basis_functions: either a Callable function, w/ signature:
+                    basis_function(x: torch.Tensor,
+                                   deg: int,
+                                   parameters: dict) -> torch.Tensor
+                    or a tuple, of size dimension, of Callables, w/ signature:
+                    basis_function(x: torch.Tensor,
+                                   deg: int,
+                                   parameters: dict) -> torch.Tensor
+                    which will each be applied to separate dimensions of the
+                    input.
+        """
         self.dimension = dimension
         self.order = order
-        self.basis_function = basis_function
-        self.params = params
-        """
-        :param basis function: the basis function to use in this
-                               Basis class - i.e., smooth_exponential_basis.
 
-                Expected to have signature:
-                                basis_function(x: torch.Tensor,
-                                               deg: int,
-                                               params: dict) -> torch.Tensor
+        # check whether the number of basis functions is correct
+        if isinstance(basis_functions, Callable):
+            basis_functions = (basis_functions,)
 
+        if len(basis_functions) != dimension:
+            raise ValueError(
+                "The number of basis functions passed in must match the dimension parameter"
+            )
 
-        """
+        if isinstance(parameters, dict) or parameters is None:
+            parameters = (parameters,)
+
+        if parameters is not None and len(parameters) != self.dimension:
+            raise ValueError(
+                "The number of parameter dicts passed must match the dimension parameter"
+            )
+
+        self.basis_functions = basis_functions
+        self.parameters = parameters
         return
 
     def get_dimension(self):
@@ -71,14 +107,13 @@ class Basis:
         """
         return self.dimension
 
-    def __call__(self, x):
+    def get_order(self):
         """
-        Returns the whole basis evaluated at an input.
-
-        output shape: [x.shape[0], self.order]
-
+        Getter method for the order of the model (i.e. number of basis functions).
         """
-        # breakpoint()
+        return self.order
+
+    def _get_intermediate_result(self, x: torch.Tensor):
         # check input shape
         if len(x.shape) <= 1:
             x = x.unsqueeze(-1)
@@ -90,40 +125,100 @@ class Basis:
                     dim=self.dimension
                 )
             )
-
-        # can I tensorise the hstack? In basis function?
-        result = torch.hstack(
-            [
-                self.basis_function(x, deg, self.params)
-                for deg in range(self.order)
-            ]
-        )
-
+        result = []  # torch.zeros(x.shape[0], self.order, self.dimension)
+        for d in range(self.dimension):
+            basis_function = self.basis_functions[d]
+            result.append(
+                torch.vstack(
+                    [
+                        basis_function(x[:, d], deg, self.parameters[d])
+                        for deg in range(self.order)
+                    ]
+                ).t()
+            )  # [Nxm]
         return result
 
-    def get_params(self):
-        return self.params
+    def __call__(self, x):
+        """
+        Returns the whole basis evaluated at an input.
+
+        input shape: [x.shape[0], self.dimension]
+        output shape: [x.shape[0], self.order]
+        """
+        # result is a list of d N x m matrices
+        result = self._get_intermediate_result(x)
+
+        potential_result = reshaping(result)
+        result = torch.reshape(
+            potential_result, (x.shape[0], self.order**self.dimension)
+        )
+
+        if self.dimension == 1:
+            result = result.squeeze(1)
+        return result
+
+    def get_parameters(self):
+        return self.parameters
+
+    def __add__(self, other):
+        """
+        When adding two bases, return a basis that
+        is of the same order.
+        """
+        if self.order != other.order:
+            raise ValueError(
+                "Other basis is not of the same order as this basis. This Basis order: {this_order}; other Rasis order: {other_order}".format(
+                    this_order=self.order, other_order=other.order
+                )
+            )
+        if self.dim != other.dim:
+            raise ValueError(
+                "Other basis is not of the same dim as this basis. This Basis order: {this_dim}; other Rasis order: {other_dim}".format(
+                    this_dim=self.dim, other_dim=other.dim
+                )
+            )
+        new_basis = CompositeBasis(self, other)
+        return new_basis
+
+
+class CompositeBasis(Basis):
+    def __init__(self, old_basis, new_basis: Basis):
+        self.old_basis = old_basis
+        self.new_basis = new_basis
+
+    def __call__(self, x):
+        return self.old_basis(x) + self.new_basis(x)
 
     def get_order(self):
         return self.order
 
 
 class RandomFourierFeatureBasis(Basis):
-    def __init__(self, dim: int, order: int):
+    def __init__(
+        self,
+        dim: int,
+        order: int,
+        spectral_distribution: D.Distribution,
+        use_2pi=False,
+    ):
         """
         Random Fourier Feature basis for constructing the
         """
-        self.w_dist = D.Normal(torch.zeros(dim), torch.ones(dim))
+        # self.w_dist = D.Normal(torch.zeros(dim), torch.ones(dim))
+        self.w_dist = spectral_distribution  # samples are the size of "dim" which is 1-d for stationary, 2-d for non-stationary.
         self.b_dist = D.Uniform(0.0, 2 * math.pi)
         self.b_sample_shape = torch.Size([order])
         self.w_sample_shape = torch.Size([order])
 
         self.b = self.b_dist.sample(self.b_sample_shape)
-        self.w = self.w_dist.sample(self.w_sample_shape)  # .squeeze(1)
+        self.w = self.w_dist.sample(self.w_sample_shape)  # order x dim
+
         self.order = order
         self.params = None
 
-    def __call__(self, x):
+        self.use_2pi = use_2pi  # mark whether we're multiplying the argument in the cosine by 2π. I think it is necessary!
+
+    def __call__(self, x: torch.Tensor):
         """
         Returns the value of these random features evaluated at the inputs x.
 
@@ -134,31 +229,56 @@ class RandomFourierFeatureBasis(Basis):
 
         n = x.shape[0]
         b = self.b.repeat(n, 1).t()
+
+        """
+        Because the frequencies calculated in the DFT are integer frequencies, 
+        they're essentially pre-scaled by 2 * π. Multiplying
+        the argument in cos(x) by 2π gives all integer frequencies (in radians)
+        meaning you get strong excessive periodic behaviour in the
+        resulting basis functions. 
+        """
         z = (math.sqrt(2.0 / self.order) * torch.cos(self.w @ x.t() + b)).t()
-        # print(z.shape)
+
         return z
 
     def get_w(self):
         """
-        Getter for feature coefficients.
+        Getter for feature spectral weights.
         """
         return self.w
+
+    def get_b(self):
+        """
+        Getter for feature phase parameters.
+        """
+        return self.b
 
 
 class OrthonormalBasis(Basis):
     def __init__(
         self,
-        basis_function: OrthogonalPolynomial,
-        weight_function: Callable,
+        basis_functions: OrthogonalPolynomial,
+        weight_functions: Callable,
         dimension: int,
         order: int,
         params: dict = None,
     ):
-        assert isinstance(
-            basis_function, OrthogonalPolynomial
-        ), "the basis function should be of type OrthogonalPolynomial"
-        super().__init__(basis_function, dimension, order, params)
-        self.weight_function = weight_function
+        # assert isinstance(
+        # basis_functions, OrthogonalPolynomial
+        # ), "the basis function should be of type OrthogonalPolynomial"
+
+        super().__init__(basis_functions, dimension, order, params)
+        if (
+            isinstance(weight_functions, tuple)
+            and len(weight_functions) != dimension
+        ):
+            raise ValueError(
+                "The number of basis functions passed in must match the dimension parameter"
+            )
+        elif isinstance(weight_functions, Callable):
+            # put the single basis function into a tuple for DRY in the call method
+            weight_functions = (weight_functions,)
+        self.weight_functions = weight_functions
 
     def __call__(self, x):
         """
@@ -168,22 +288,43 @@ class OrthonormalBasis(Basis):
         can be applied "outside" the tensor of orthogonal polynomials,
         so it is feasible to do this separately (and therefore faster).
         """
-        ortho_poly_basis = super().__call__(x)
-        result = torch.sqrt(self.weight_function(x))
-        return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
+        if len(x.shape) == 1:
+            x = x.unsqueeze(1)
+        ortho_poly_basis = super()._get_intermediate_result(x)
+        for d, weight_function in enumerate(self.weight_functions):
+            weights = torch.sqrt(
+                weight_function(x[:, d])
+            ).squeeze()  # the weight function is per-dimension
+            # breakpoint()
+            try:
+                ortho_poly_basis[d] *= weights.repeat(self.order, 1).t()
+            except:
+                print("ERRORED!")
+                breakpoint()
+        # now that we have the
+        reshaped_ortho_basis = reshaping(ortho_poly_basis)
+        result = torch.reshape(
+            reshaped_ortho_basis, (x.shape[0], self.order**self.dimension)
+        )
+
+        if self.dimension == 1:
+            result = result.squeeze()
+        return result
+        # return torch.einsum("ij,i -> ij", ortho_poly_basis, result)
 
     def set_gammas(self, gammas):
         """
         Updates the gammas on the basis function and the
         weight function.
         """
-        self.basis_function.set_gammas(gammas)
-        self.weight_function.set_gammas(gammas)
+        for i, basis_function in enumerate(self.basis_functions):
+            basis_function.set_gammas(gammas[:, i])
+        for i, weight_function in enumerate(self.weight_functions):
+            weight_function.set_gammas(gammas[:, i])
 
 
 def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
     print("THIS SHOULD NOT BE BEING USED ANYWHERE")
-    # breakpoint()
     """
     The smooth exponential basis functions as constructed in Fasshauer (2012),
     "second" paramaterisation. It is orthogonal w.r.t the measure ρ(x)
@@ -198,7 +339,6 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
     : param deg: degree of polynomial used in construction of func
     : param params: dict of parameters. keys set on case-by-case basis
     """
-    # breakpoint()
     if deg > 42:
         print(
             r"Warning: the degree of the hermite polynomial is relatively"
@@ -237,7 +377,6 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
     # right value.
 
     abs_hermite_term = torch.log(torch.abs(hermite_term))
-    # breakpoint()
     mask = torch.where(
         hermite_term < 0,
         -torch.ones(hermite_term.shape),
@@ -252,7 +391,6 @@ def smooth_exponential_basis(x: torch.Tensor, deg: int, params: dict):
 
 def smooth_exponential_eigenvalues(deg: int, params: dict):
     print("THIS SHOULD NOT BE BEING USED ANYWHERE")
-    # breakpoint()
     """
     Returns the vector of eigenvalues, up to length deg, using the parameters
     provided in params. This comes from Fasshauer2012 - where it is explained
@@ -282,13 +420,11 @@ def smooth_exponential_eigenvalues(deg: int, params: dict):
         lamda_d = left_term * right_term
         eigenvalue = torch.prod(lamda_d, dim=1)
         eigenvalues[i - 1] = eigenvalue
-    # breakpoint()
-    # breakpoint()
     return eigenvalues
 
 
 def smooth_exponential_basis_fasshauer(
-    x: torch.Tensor, deg: int, params: dict
+    x: torch.Tensor, deg: int, params: dict, dim=None
 ):
     """
     The smooth exponential basis functions as constructed in Fasshauer (2012),
@@ -299,14 +435,19 @@ def smooth_exponential_basis_fasshauer(
     Polynomial as opposed to the Probabilist's.
 
     : param x: the input points to evaluate the function at. Should be of
-               dimensions [n,d]
+               dimensions [n, d]
     : param deg: degree of polynomial used in construction of func
     : param params: dict of parameters.
                     Required keys:
                         - precision_parameter
                         - ard_parameter
+    : param dim: the dimension to evaluate the basis on
+
+    In order to allow per-dimension basis function selection on Gaussian processes
+    (see mercergp), we allow one to use the standard smooth exponential
+    fasshauer basis here; using the dim parameter to select a dimension
+    on which to evaluate the basis.
     """
-    # breakpoint()
     if deg > 42:
         print(
             r"Warning: the degree of the hermite polynomial is relatively"
@@ -314,10 +455,16 @@ def smooth_exponential_basis_fasshauer(
             + "Try lowering the order, or use a different basis function."
         )
 
-    a = torch.diag(params["precision_parameter"])  # precision parameter
-    b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
+    if dim is not None and isinstance(dim, int):
+        a = torch.diag(params["precision_parameter"])[
+            dim
+        ]  # precision parameter
+        b = torch.diag(params["ard_parameter"])[dim]  # ε  - of dimension d
+    else:
+        a = torch.diag(params["precision_parameter"])  # precision parameter
+        b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     # of the measure w.r.t the hermite functions are orthogonal
-    c = torch.sqrt(a ** 2 + 2 * a * b)
+    c = torch.sqrt(a**2 + 2 * a * b)
     # sigma = torch.sqrt(params["variance_parameter"])
     if (c != c).any():
         print("c in fasshauer is NaN!")
@@ -343,21 +490,24 @@ def smooth_exponential_basis_fasshauer(
     return phi_d
 
 
-def smooth_exponential_eigenvalues_fasshauer(deg: int, params: dict):
+def smooth_exponential_eigenvalues_fasshauer(order: int, params: dict):
     """
-    Returns the vector of eigenvalues, up to length deg, using the parameters
-    provided in params.
-    :param deg: the degree up to which the eigenvalues should be computed.
+    If in one dimension, returns the vector of eigenvalues, up to length order, using the parameters
+    provided in params. Otherwise, returns a matrix of [order, dimension]
+    per-dimension eigenvalue vectors as columns. The calling EigenvalueGenerator
+    class is then expected to convert these to tensor product length
+    i.e. to become [order ** dimension].
+    :param order: the degree up to which the eigenvalues should be computed.
     :param params: a dictionary of parameters whose keys included
     """
     b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     a = torch.diag(params["precision_parameter"])  # precision
-    c = torch.sqrt(a ** 2 + 2 * a * b)
+    c = torch.sqrt(a**2 + 2 * a * b)
     left_term = torch.sqrt(2 * a / (a + b + c))
     right_term = b / (a + b + c)
 
     # construct the vector
-    exponents = torch.linspace(0, deg - 1, deg)
+    exponents = torch.linspace(0, order - 1, order).repeat(len(b), 1).t()
     eigenvalues = left_term * torch.pow(right_term, exponents)
     return eigenvalues.squeeze()
 
@@ -378,7 +528,7 @@ def get_linear_coefficients_fasshauer(
     """
     b = torch.diag(params["ard_parameter"])  # ε  - of dimension d
     a = torch.diag(params["precision_parameter"])  # precision
-    c = torch.sqrt(a ** 2 + 2 * a * b)
+    c = torch.sqrt(a**2 + 2 * a * b)
 
     basis_intercept = intercept * torch.pow(a / c, 0.25)
     basis_slope = 0.5 * slope * torch.pow(a, 0.25) / torch.pow(c, 0.75)
@@ -452,7 +602,7 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
         )
 
     # define weight function
-    weight_term = torch.pow(1 - z ** 2, weight_power)
+    weight_term = torch.pow(1 - z**2, weight_power)
     if (chebyshev_term != chebyshev_term).any():
         raise ValueError(
             "Chebyshev returning NaNs. Ensure"
@@ -480,9 +630,39 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
 
 if __name__ == "__main__":
     # pass
-    rff = RandomFourierFeatureBasis(2, 1000)
-    # x = torch.linspace(-1, 1, 100)
-    x = torch.ones((1000, 2))
+    test_fasshauer_basis = True
+    test_rff_basis = True
+    test_rff_basis_multidim = False
 
-    plt.plot(x, rff(x))
-    plt.show()
+    if test_fasshauer_basis:
+        basis = Basis()
+
+    if test_rff_basis:
+        dim = 1
+        order = 5000
+        point_count = 1000
+        spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
+        rff = RandomFourierFeatureBasis(dim, order, spectral_distribution)
+        # x = torch.linspace(-1, 1, 100)
+        # x = torch.ones((order, dim))
+        x = torch.linspace(-3, 3, point_count)
+
+        data = rff(x)
+        coeffics = D.Normal(0.0, 1.0).sample((order,))
+        breakpoint()
+        gp = coeffics @ data.t()
+
+        # plt.plot(x.numpy().flatten(), data.numpy())
+        plt.plot(x.numpy().flatten(), gp.numpy())
+        plt.show()
+
+    if test_rff_basis_multidim:
+        dim = 2
+        order = 5000
+        point_count = 1000
+        spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
+        # spectral_distribution = D.Normal(0.0, 1.0)
+        rffbasis = RandomFourierFeatureBasis(dim, order, spectral_distribution)
+        x = torch.linspace(-4, 4, point_count)
+        plt.plot(x, rffbasis(x))
+        plt.show()
