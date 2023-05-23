@@ -348,7 +348,7 @@ def get_moments_from_function(
     end_point: torch.Tensor,
     func_max: torch.Tensor,
     order: int,
-    sample_size=2000 ** 2,
+    sample_size=2000**2,
 ):
     sample = sample_from_function(
         target, end_point, func_max, sample_size
