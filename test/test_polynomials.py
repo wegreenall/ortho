@@ -9,7 +9,7 @@ from ortho.polynomials import (
 )
 
 
-@unittest.skip("Not Implemented Yet")
+# @unittest.skip("Not Implemented Yet")
 class TestChebyshevPolynomials(unittest.TestCase):
     def setUp(self):
         self.x = torch.linspace(-1 + 0.001, 1 - 0.001, 1000)
@@ -39,8 +39,7 @@ class TestChebyshevPolynomials(unittest.TestCase):
                 test_values = torch.Tensor(
                     self.chebyshev_polynomials_first[i](self.x)
                 )
-                self.assertTrue(abs(values[10] - test_values[10]) < 1e-10)
-            return
+                self.assertTrue(torch.allclose(values, test_values))
 
     def test_chebyshev_second(self):
         # tests whether calculation of the chebyshev bases gets right answer
@@ -50,8 +49,7 @@ class TestChebyshevPolynomials(unittest.TestCase):
                 test_values = torch.Tensor(
                     self.chebyshev_polynomials_second[i](self.x)
                 )
-                self.assertTrue(abs(values[10] - test_values[10]) < 1e-10)
-            return
+                self.assertTrue(torch.allclose(values, test_values))
 
 
 class TestLaguerrePolynomials(unittest.TestCase):

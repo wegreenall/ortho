@@ -7,14 +7,15 @@ from ortho.measure import MaximalEntropyDensity
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 """
-contains classes for construction of orthogonal polynomials.
-as well as methods
-for getting the measure/weight function
+Contains classes for construction of orthogonal polynomials, as well as methods
+for getting the measure/weight function.
 """
 
 
 class OrthogonalPolynomial:
-    def __init__(self, order, betas, gammas, leading=1):
+    def __init__(
+        self, order: int, betas: torch.Tensor, gammas: torch.Tensor, leading=1
+    ):
         """
         A system of orthogonal polynomials has the property that:
 
@@ -39,7 +40,6 @@ class OrthogonalPolynomial:
             )
         self.set_betas(betas)
         self.set_gammas(gammas)
-
         self.leading = leading
         return
 
@@ -54,7 +54,6 @@ class OrthogonalPolynomial:
             result = torch.ones(x.shape)
         elif deg == 1:
             result = self.leading * (x - self.betas[0])
-            # breakpoint()
         else:
             result = (self.leading * x - self.betas[deg - 1]) * self(
                 x, deg - 1, params
@@ -70,7 +69,6 @@ class OrthogonalPolynomial:
     def set_betas(self, betas):
         """
         Setter for betas on orthogonal polynomial.
-
         """
         # assert (betas >= 0).all(), "Please make sure all betas are positive"
         self.betas = betas
@@ -95,12 +93,18 @@ class OrthogonalPolynomial:
 
 
 class OrthonormalPolynomial(OrthogonalPolynomial):
-    # def set_gammas(self, gammas):
-    # super().set_gammas(gammas)
+    """
+    Subclasses the OrthogonalPolynomial to allow for normalisation.
+    The normalising constant for a given orthonormal basis is the reciprocal of
+    the product of the gammas from the Favard recursion.
+    """
 
     def __call__(self, x: torch.Tensor, deg: int, params: dict):
         result = super().__call__(x, deg, params)
-        normalising_coefficient = torch.prod(self.gammas[1:deg])
+        """
+        WARNING: TESTING for DEG+1 AS THE PRODUCT FOR THE ORTHONORMALISATION
+        """
+        normalising_coefficient = torch.prod(self.gammas[0 : deg + 1])
         return result / torch.sqrt(normalising_coefficient)
 
 
@@ -123,66 +127,14 @@ class OrthogonalBasisFunction(OrthogonalPolynomial):
         builds the weight function component.
         """
         ortho_poly_term = super().__call__(x, deg, params)
-        # med_term = torch.sqrt(self.med(x))
-        # layer = self.med.moment_net.layers[-1]
-        # print(layer.weight)
         return ortho_poly_term  # * med_term
 
     def get_weight(self, x: torch.Tensor, params: dict):
         return torch.sqrt(self.med(x, self.betas, self.gammas))
 
 
-def get_measure_from_poly(
-    poly: OrthogonalPolynomial, initial_moment=1
-) -> list:
-    """
-    Accepts a polynomial and produces from it the density of an absolutely
-    continuous measure w.r.t which the polynomial is orthogonal.
-
-    The Favard's theorem states the recurrence relation for the orthogonal
-    polynomial sequence to be:
-            P_{n+1} = (x-β_{n+1})P_n - γ_{n+1}P_{n-1}
-        so: P_{n+1} - (x-β_{n+1})P_n - γ_{n+1}P_{n-1} = 0
-
-    This is the same as:
-            xP_n(x) = P_{n+1}(x) + β_nP_n(x) + γ_n P_{n-1}(x)
-
-    Applying the linear moment functional to this relation gives the moment
-    recursion implemented here.
-
-    The moments of the measure, which uniquely define it, have the following
-    property: for each k, <L, P_k(x)> is 0. However, this implies a sequence
-    of relations for the moments w.r.t the coefficients of the polynomial:
-
-        <L, 1> = μ_0      =1 for a probability distribution, the
-                          Poisson-equivalent intensity for a Poisson
-                          measure
-
-        <L, P_1> = μ_1 - β_0μ_0 = 0
-                   => μ_1 = β_0 μ_0   i.e. the mean is β_0.
-
-        <L, P_2> = μ_2 - <L, xP_1(x)> + β_2<L, xP_1> + γ_{2}<L, P_1>
-                   => μ_2 =
-
-    The above define a sequence of relations that implicitly set the moment:
-
-        <L, P_{k+1}> = μ_{Κ+1} - {other terms} = 0
-
-    This function uses this implicit relation to acquire values for the moments
-    given the betas and gammas on the input orthogonal polynomial.
-
-    Once the moments are acquired, it is possible to construct the
-    measure via an inverse laplace transform on the moment-generating
-    function
-        Σ_ι  μ_i x^i / i!
-
-    """
-
-    raise NotImplementedError
-
-
 class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
-    def __init__(self, order, gammas):
+    def __init__(self, order: int, gammas: torch.Tensor):
         """
         If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
         then there exist coefficients γ_n != 0 for n>=1, s.t.
@@ -195,95 +147,19 @@ class SymmetricOrthogonalPolynomial(OrthogonalPolynomial):
         super().__init__(order, betas, gammas)
 
 
-def get_moments_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
-    """
-    Returns a sequence of moments calculated from a sample.
-    The odd-ordered moments are set to 0 to handle the fact that we are
-    calculating a symmetric orthogonal polynomial (we only have one equation
-    for each parameter that we want to solve for.
-    """
-    powers_of_sample = sample.repeat(2 * order + 2, 1).t() ** torch.linspace(
-        0, 2 * order + 1, 2 * order + 2
-    )
-    estimated_moments = torch.mean(powers_of_sample, dim=0)
+class SymmetricOrthonormalPolynomial(OrthonormalPolynomial):
+    def __init__(self, order: int, gammas: torch.Tensor):
+        """
+        If Pn is symmetric, i.e. Pn(-x) = (-1)^n Pn(x),
+        then there exist coefficients γ_n != 0 for n>=1, s.t.
+                P_{n+1} = xP_n(x) - γ_nP_{n-1}
 
-    # build moments
-    moments = torch.zeros(2 * order + 2)
-    moments[0] = 1
-    for i in range(1, 2 * order + 2):
-        if i % 2 == 0:  # i.e. even
-            moments[i] = estimated_moments[i]
-    # breakpoint()
-    return moments
-
-
-def get_gammas_from_moments(moments: torch.Tensor, order: int) -> torch.Tensor:
-    """
-    Accepts a tensor containing the moments from a given
-    distribution, and generates the gammas that correspond to them;
-    i.e., the gammas from the orthogonal polynomial series that
-    is orthogonal w.r.t the linear moment functional with those moments.
-    """
-    dets = torch.zeros(order + 2)
-    dets[0] = dets[1] = 1.0
-    gammas = torch.zeros(order)
-    for i in range(order):
-        hankel_matrix = moments[: 2 * i + 1].unfold(0, i + 1, 1)
-        dets[i + 2] = torch.linalg.det(hankel_matrix)
-    gammas = dets[:-2] * dets[2:] / (dets[1:-1] ** 2)
-    return gammas
-
-
-def get_poly_from_moments(
-    moments: torch.Tensor,
-    order: int,
-) -> SymmetricOrthogonalPolynomial:
-    """
-    Accepts a list of moment values and produces from it a
-    SymmetricOrthogonalPolynomial.
-
-    The standard recurrence for an orthogonal polynomial series has n equations
-    and 2n unknowns - this means that it is not feasible to construct, from a
-    given sequence of moments, an orthogonal polynomial sequence that is
-    orthogonal     w.r.t the given moments. However, if we impose
-    symmetricality, we can build a sequence of symmetric orthogonal polynomials
-    from a given set of moments.
-    """
-    gammas = torch.zeros(order)
-
-    # to construct the polynomial from the sequnce of moments, utilise the
-    # sequence of equations:
-    gammas = get_gammas_from_moments(moments, order)
-
-    return SymmetricOrthogonalPolynomial(order, gammas)
-
-
-def get_gammas_from_sample(sample: torch.Tensor, order: int) -> torch.Tensor:
-    """
-    Composes get_gammas_from_moments and get_moments_from_sample to
-    produce the gammas from a sample. This just allows for simple
-    calls to individual functions to construct the necessary
-    component in any given situation.
-    """
-    return get_gammas_from_moments(
-        get_moments_from_sample(sample, order), order
-    )
-
-
-def get_poly_from_sample(
-    sample: torch.Tensor, order: int
-) -> SymmetricOrthogonalPolynomial:
-    """
-    Returns a SymmetricOrthogonalPolynomial calculated by:
-         - taking the moments from the sample, with odd moments set to 0;
-         - constructing from these the gammas that correspond to the
-           SymmetricOrthogonalPolynomial recursion
-         - generating the SymmetricOrthogonalPolynomial from these gammas.
-    Hence we have a composition of the three functions:
-          get_moments_from_sample -> get_poly_from_moments
-    """
-    moments = get_moments_from_sample(sample, order)
-    return get_poly_from_moments(moments, order)
+        with initial conditions P_0(x) = 1 and P_1(x) = x
+        This is equivalent to an orthogonal polynomial sequence with β_n = 0
+        for each n.
+        """
+        betas = torch.zeros(order)
+        super().__init__(order, betas, gammas)
 
 
 class OrthogonalPolynomialSeries:
@@ -398,6 +274,77 @@ class OrthogonalPolynomialSeries:
             self.b_terms.append(b(k))
 
 
+def get_measure_from_poly(
+    poly: OrthogonalPolynomial, initial_moment=1
+) -> list:
+    """
+    Accepts a polynomial and produces from it the density of an absolutely
+    continuous measure w.r.t which the polynomial is orthogonal.
+
+    The Favard's theorem states the recurrence relation for the orthogonal
+    polynomial sequence to be:
+            P_{n+1} = (x-β_{n+1})P_n - γ_{n+1}P_{n-1}
+        so: P_{n+1} - (x-β_{n+1})P_n - γ_{n+1}P_{n-1} = 0
+
+    This is the same as:
+            xP_n(x) = P_{n+1}(x) + β_nP_n(x) + γ_n P_{n-1}(x)
+
+    Applying the linear moment functional to this relation gives the moment
+    recursion implemented here.
+
+    The moments of the measure, which uniquely define it, have the following
+    property: for each k, <L, P_k(x)> is 0. However, this implies a sequence
+    of relations for the moments w.r.t the coefficients of the polynomial:
+
+        <L, 1> = μ_0      =1 for a probability distribution, the
+                          Poisson-equivalent intensity for a Poisson
+                          measure
+
+        <L, P_1> = μ_1 - β_0μ_0 = 0
+                   => μ_1 = β_0 μ_0   i.e. the mean is β_0.
+
+        <L, P_2> = μ_2 - <L, xP_1(x)> + β_2<L, xP_1> + γ_{2}<L, P_1>
+                   => μ_2 =
+
+    The above define a sequence of relations that implicitly set the moment:
+
+        <L, P_{k+1}> = μ_{Κ+1} - {other terms} = 0
+
+    This function uses this implicit relation to acquire values for the moments
+    given the betas and gammas on the input orthogonal polynomial.
+
+    Once the moments are acquired, it is possible to construct the
+    measure via an inverse laplace transform on the moment-generating
+    function
+        Σ_ι  μ_i x^i / i!
+
+    """
+
+    raise NotImplementedError
+
+
+# def get_poly_from_moments(
+# moments: torch.Tensor,
+# order: int,
+# ) -> "SymmetricOrthonormalPolynomial":
+# """
+# Accepts a list of moment values and produces from it a
+# SymmetricOrthogonalPolynomial.
+
+# The standard recurrence for an orthogonal polynomial series has n equations
+# and 2n unknowns - this means that it is not feasible to construct, from a
+# given sequence of moments, an orthogonal polynomial sequence that is
+# orthogonal     w.r.t the given moments. However, if we impose
+# symmetricality, we can build a sequence of symmetric orthogonal polynomials
+# from a given set of moments.
+# """
+# gammas = torch.zeros(order)
+
+# # to construct the polynomial from the sequnce of moments, utilise the
+# # sequence of equations:
+# gammas = get_gammas_from_moments(moments, order)
+
+# return SymmetricOrthonormalPolynomial(order, gammas)
 if __name__ == "__main__":
     check_ortho_poly = True
     check_sym_poly = True

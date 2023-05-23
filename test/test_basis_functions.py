@@ -2,13 +2,107 @@ import math
 import unittest
 
 import torch
+import torch.distributions as D
 
-from basis_functions import (
+from ortho.basis_functions import (
     Basis,
+    CompositeBasis,
+    RandomFourierFeatureBasis,
     smooth_exponential_basis,
     standard_chebyshev_basis,
+    reshaping,
 )
 from special import hermval
+
+
+class TestEinsumMaker(unittest.TestCase):
+    def setUp(self):
+        self.N = 100
+        self.order = 10
+        self.dimension = 3
+        self.x = torch.ones(self.N, self.order)
+        self.y = 2 * torch.ones(self.N, self.order)
+        self.z = 3 * torch.ones(self.N, self.order)
+        # self.data = torch.stack((self.x, self.y, self.z), dim=-1)
+        self.data = [self.x, self.y, self.z]
+
+    def test_einsum_shape(self):
+        result = reshaping(self.data)
+        # breakpoint()
+        self.assertTrue(
+            result.shape
+            == torch.Size([self.N, self.order, self.order, self.order])
+        )
+
+    def test_einsum(self):
+        result = reshaping(self.data)
+        self.assertTrue(
+            torch.allclose(
+                result[0, 1, 2, 3],
+                torch.tensor(6.0),
+            )
+        )
+
+
+# @unittest.skip("")
+class TestRandomFourierFeatureBasis(unittest.TestCase):
+    def setUp(self):
+        self.input_size = 100
+        self.dimension = 1
+        self.order = 1000
+        self.spectral_distribution = D.Normal(
+            torch.Tensor([0.0]), torch.Tensor([1.0])
+        )
+        self.random_fourier_basis = RandomFourierFeatureBasis(
+            self.dimension, self.order, self.spectral_distribution
+        )
+
+    def test_w_shape(self):
+        w = self.random_fourier_basis.get_w()
+        self.assertEqual(w.shape, torch.Size([self.order, self.dimension]))
+
+    def test_b_shape(self):
+        b = self.random_fourier_basis.get_b()
+        self.assertEqual(b.shape, torch.Size([self.order]))
+
+    def test_output_shape(self):
+        # x = torch.ones((self.input_size, self.dimension))
+        x = torch.linspace(-4, 4, self.input_size)
+
+        output = self.random_fourier_basis(x)
+        self.assertEqual(
+            output.shape, torch.Size([self.input_size, self.order])
+        )
+
+
+# @unittest.skip("")
+class TestRandomFourierFeatureBasis2d(unittest.TestCase):
+    def setUp(self):
+        self.input_size = 100
+        self.dimension = 2
+        self.order = 1000
+        self.spectral_distribution = D.Normal(
+            torch.Tensor([0.0, 0.0]), torch.Tensor([1.0, 1.0])
+        )
+        self.random_fourier_basis = RandomFourierFeatureBasis(
+            self.dimension, self.order, self.spectral_distribution
+        )
+
+    def test_w_shape(self):
+        w = self.random_fourier_basis.get_w()
+        self.assertEqual(w.shape, torch.Size([self.order, self.dimension]))
+
+    def test_b_shape(self):
+        b = self.random_fourier_basis.get_b()
+        self.assertEqual(b.shape, torch.Size([self.order]))
+        return
+
+    def test_output_shape(self):
+        x = torch.ones((self.input_size, self.dimension))
+        output = self.random_fourier_basis(x)
+        self.assertEqual(
+            output.shape, torch.Size([self.input_size, self.order])
+        )
 
 
 class TestBasisClass(unittest.TestCase):
@@ -33,6 +127,72 @@ class TestBasisClass(unittest.TestCase):
         N = 100
         x = torch.linspace(0.1, 10 - 0.1, N).unsqueeze(1)
         y = self.basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+
+class TestBasisMultivariate(unittest.TestCase):
+    def setUp(self):
+        self.dimension = 3
+        bases = (standard_chebyshev_basis,) * self.dimension
+        self.order = 10
+        params_1 = {
+            "upper_bound": torch.tensor(10.0, dtype=float),
+            "lower_bound": torch.tensor(0.0, dtype=float),
+        }
+        self.basis = Basis(bases, self.dimension, self.order, (params_1,) * 3)
+        pass
+
+    def test_shape(self):
+        N = 100
+        x1 = torch.linspace(0.1, 10 - 0.1, N)
+        x = torch.vstack([x1, x1, x1]).t()  # to be [N x d]
+        y = self.basis(x)  # test output, should be a 10^2 by order matrix
+        self.assertEqual(
+            y.shape, torch.Size([N, self.order ** self.dimension])
+        )
+        pass
+
+
+class TestCompositeBasisClass(unittest.TestCase):
+    def setUp(self):
+        bases = standard_chebyshev_basis
+        self.dimension = 1
+        self.max_degree = 10
+        params_1 = {
+            "upper_bound": torch.tensor(10.0, dtype=float),
+            "lower_bound": torch.tensor(0.0, dtype=float),
+        }
+        self.basis_1 = Basis(bases, self.dimension, self.max_degree, params_1)
+        self.basis_2 = Basis(bases, self.dimension, self.max_degree, params_1)
+        self.basis = CompositeBasis(self.basis_1, self.basis_2)
+        self.second_basis = CompositeBasis(self.basis, self.basis_2)
+
+    def test_shape_flat(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N)
+        y = self.basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+    def test_shape(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N).unsqueeze(1)
+        y = self.basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+    def test_composite_composite_shape(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N)
+        y = self.second_basis(x)  # test output, should be a 10^2 matrix
+        self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
+        pass
+
+    def test_composite_composite_shape_flat(self):
+        N = 100
+        x = torch.linspace(0.1, 10 - 0.1, N).unsqueeze(1)
+        y = self.second_basis(x)  # test output, should be a 10^2 matrix
         self.assertEqual(y.shape, torch.Size([N, self.max_degree]))
         pass
 
