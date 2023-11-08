@@ -59,6 +59,13 @@ class ProbabilistsHermitePolynomial(OrthogonalPolynomial):
         super().__init__(order, betas, gammas)
 
 
+class WeightedProbabilistsHermitePolynomial(OrthogonalPolynomial):
+    def __init__(self, order, weight: float):
+        betas = torch.zeros(order)
+        gammas = weight * torch.linspace(0, order - 1, order)
+        super().__init__(order, betas, gammas)
+
+
 class HermitePolynomial(OrthogonalPolynomial):
     def __init__(self, order):
         betas = torch.zeros(order)

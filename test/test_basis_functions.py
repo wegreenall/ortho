@@ -149,7 +149,7 @@ class TestBasisMultivariate(unittest.TestCase):
         x = torch.vstack([x1, x1, x1]).t()  # to be [N x d]
         y = self.basis(x)  # test output, should be a 10^2 by order matrix
         self.assertEqual(
-            y.shape, torch.Size([N, self.order ** self.dimension])
+            y.shape, torch.Size([N, self.order**self.dimension])
         )
         pass
 
@@ -204,18 +204,18 @@ class TestHermitePolynomials(unittest.TestCase):
         self.prob_polynomials = [
             lambda x: 1,
             lambda x: x,
-            lambda x: x ** 2 - 1,
-            lambda x: x ** 3 - 3 * x,
-            lambda x: x ** 4 - 6 * x ** 2 + 3,
-            lambda x: x ** 5 - 10 * x ** 3 + 15 * x,
+            lambda x: x**2 - 1,
+            lambda x: x**3 - 3 * x,
+            lambda x: x**4 - 6 * x**2 + 3,
+            lambda x: x**5 - 10 * x**3 + 15 * x,
         ]
         self.phys_polynomials = [
             lambda x: 1,
             lambda x: 2 * x,
-            lambda x: 4 * x ** 2 - 2,
-            lambda x: 8 * x ** 3 - 12 * x,
-            lambda x: 16 * x ** 4 - 48 * x ** 2 + 12,
-            lambda x: 32 * x ** 5 - 160 * x ** 3 + 120 * x,
+            lambda x: 4 * x**2 - 2,
+            lambda x: 8 * x**3 - 12 * x,
+            lambda x: 16 * x**4 - 48 * x**2 + 12,
+            lambda x: 32 * x**5 - 160 * x**3 + 120 * x,
         ]
 
     def test_probability_polynomials(self):
@@ -281,16 +281,16 @@ class TestChebyshevBasis(unittest.TestCase):
         self.chebyshev_polynomials = [
             lambda x: 1,
             lambda x: 2 * x,
-            lambda x: 4 * x ** 2 - 1,
-            lambda x: 8 * x ** 3 - 4 * x,
-            lambda x: 16 * x ** 4 - 12 * x ** 2 + 1,
-            lambda x: 32 * x ** 5 - 32 * x ** 3 + 6 * x,
+            lambda x: 4 * x**2 - 1,
+            lambda x: 8 * x**3 - 4 * x,
+            lambda x: 16 * x**4 - 12 * x**2 + 1,
+            lambda x: 32 * x**5 - 32 * x**3 + 6 * x,
         ]
         self.epsilon = 0.00000001
         pass
 
     def weight_function(self, x, lb, ub):
-        return 2 / math.sqrt((ub - lb) * (math.pi)) * ((1 - x ** 2) ** 0.25)
+        return 2 / math.sqrt((ub - lb) * (math.pi)) * ((1 - x**2) ** 0.25)
 
     def test_chebyshev_basis_correctness(self):
         # tests whether calculation of the chebyshev bases gets right answer
@@ -421,7 +421,7 @@ class TestHermiteBasis(unittest.TestCase):
                 #   σ = 1
                 alpha = self.params["ard_parameter"]
                 beta_part = torch.pow(torch.tensor(5), torch.tensor(0.25))
-                delta_part = alpha * (beta_part ** 2 - 1) / 2
+                delta_part = alpha * (beta_part**2 - 1) / 2
 
                 constant_part = torch.sqrt(beta_part) / math.sqrt(
                     (2 ** (deg)) * math.factorial(deg)

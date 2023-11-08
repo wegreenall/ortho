@@ -36,27 +36,6 @@ formulation of an orthonormal basis.
 """
 
 
-def reshaping(tensors: torch.Tensor):
-    """For a N x m x d tensor, returns the einsum resulting from:
-    torch.einsum("na, nb, nc, nd -> nabcd", tensor[:,:,0], tensor[:,:,1], tensor[:,:,2], tensor[:,:,3])
-    """
-    einsum_string = ""
-    used_chars = ""
-    i = 0
-    for i in range(len(tensors) - 1):
-        einsum_string += "n" + chr(ord("a") + i) + ","
-        used_chars += chr(ord("a") + i)
-    einsum_string += (
-        "n"
-        + chr(ord("a") + i + 1)
-        + "-> n"
-        + used_chars
-        + chr(ord("a") + i + 1)
-    )
-    result = torch.einsum(einsum_string, *tensors)
-    return result
-
-
 class Basis:
     def __init__(
         self,
@@ -588,11 +567,12 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
         if deg == 0:
             normalising_constant = math.sqrt(2 / math.pi)
         else:
-            normalising_constant = 2 / math.sqrt(math.pi)
+            normalising_constant = 2 / math.sqrt(
+                (upper_boundary - lower_boundary) * math.pi
+            )
 
     elif chebyshev == "second":
         chebyshev_term = chebyshev_second(z, deg)
-
         # exponent of weight function (1-z**2)
         weight_power = torch.tensor(0.25)
 
@@ -604,6 +584,10 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
     # define weight function
     weight_term = torch.pow(1 - z**2, weight_power)
     if (chebyshev_term != chebyshev_term).any():
+        print("Z: ", z)
+        print("X: ", x)
+        print("Got Nan in Chebyshev; check bounds")
+        breakpoint()
         raise ValueError(
             "Chebyshev returning NaNs. Ensure"
             + "it is being evaluated within boundaries."
@@ -626,6 +610,27 @@ def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
                      over which the function is to be a basis respectively.
     """
     pass
+
+
+def reshaping(tensors: torch.Tensor):
+    """For a N x m x d tensor, returns the einsum resulting from:
+    torch.einsum("na, nb, nc, nd -> nabcd", tensor[:,:,0], tensor[:,:,1], tensor[:,:,2], tensor[:,:,3])
+    """
+    einsum_string = ""
+    used_chars = ""
+    i = 0
+    for i in range(len(tensors) - 1):
+        einsum_string += "n" + chr(ord("a") + i) + ","
+        used_chars += chr(ord("a") + i)
+    einsum_string += (
+        "n"
+        + chr(ord("a") + i + 1)
+        + "-> n"
+        + used_chars
+        + chr(ord("a") + i + 1)
+    )
+    result = torch.einsum(einsum_string, *tensors)
+    return result
 
 
 if __name__ == "__main__":

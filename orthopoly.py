@@ -46,8 +46,10 @@ class OrthogonalPolynomial:
     def __call__(
         self, x: torch.Tensor, deg: int, params: dict
     ) -> torch.Tensor:
-        """This produces the value of the polynomial by constructing the
-        fundamental recursion."""
+        """
+        This produces the value of the polynomial by constructing the
+        fundamental recursion.
+        """
         if deg > self.order:
             raise ValueError("The order of this polynomial is not high enough")
         if deg == 0:
@@ -90,6 +92,20 @@ class OrthogonalPolynomial:
 
     def get_gammas(self):
         return self.gammas
+
+    def get_jacobi_operator(self):
+        """
+        Returns the Jacobi operator for the orthogonal polynomial.
+        """
+        matrix = torch.zeros((self.order, self.order))
+        for i in range(self.order):
+            matrix[i, i] = self.betas[i]
+            if i > 0:
+                matrix[i, i - 1] = torch.sqrt(self.gammas[i])
+            if i < self.order - 1:
+                matrix[i, i + 1] = torch.sqrt(self.gammas[i + 1])
+
+        return matrix
 
 
 class OrthonormalPolynomial(OrthogonalPolynomial):
