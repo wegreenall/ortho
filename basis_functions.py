@@ -98,15 +98,19 @@ class Basis:
             x = x.unsqueeze(-1)
         elif x.shape[1] != self.dimension:
             raise ValueError(
-                "The dimension of x should be {dim} for this,\
+                "The dimension of the inputs should be {dim} for this,\
                               because that is the dim of the\
                               basis.".format(
                     dim=self.dimension
                 )
             )
         result = []  # torch.zeros(x.shape[0], self.order, self.dimension)
+
+        # construct the multidimensional basis evaluation
         for d in range(self.dimension):
-            basis_function = self.basis_functions[d]
+            basis_function = self.basis_functions[
+                d
+            ]  # get the basis function in this dimension
             result.append(
                 torch.vstack(
                     [
@@ -122,7 +126,7 @@ class Basis:
         Returns the whole basis evaluated at an input.
 
         input shape: [x.shape[0], self.dimension]
-        output shape: [x.shape[0], self.order]
+        output shape: [x.shape[0], self.order ** self.dimension] i.e. N x m
         """
         # result is a list of d N x m matrices
         result = self._get_intermediate_result(x)
@@ -594,6 +598,18 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
         )
 
     return weight_term * chebyshev_term * normalising_constant
+
+
+def cosine_basis(x: torch.Tensor, deg: int, params: dict):
+    """
+    The cosine basis as found in (Walder and Bishop, 2017).
+    """
+    base_constant = math.sqrt(2.0 / math.pi)
+    if deg == 0:
+        normalising_constant = math.sqrt(1 / 2.0)
+    else:
+        normalising_constant = 1.0
+    return torch.cos(deg * x) * base_constant * normalising_constant
 
 
 def standard_haar_basis(x: torch.Tensor, deg: int, params: dict):
