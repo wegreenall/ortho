@@ -568,16 +568,16 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
         weight_power = torch.tensor(-0.25)
 
         # define the normalising constant
+        spacing_term = torch.sqrt((upper_boundary - lower_boundary) / 2)
         if deg == 0:
-            normalising_constant = math.sqrt(2 / math.pi)
+            normalising_constant = math.sqrt(1 / math.pi) / spacing_term
         else:
-            normalising_constant = 2 / math.sqrt(
-                (upper_boundary - lower_boundary) * math.pi
-            )
+            normalising_constant = math.sqrt(2 / math.pi) / spacing_term
 
     elif chebyshev == "second":
         chebyshev_term = chebyshev_second(z, deg)
         # exponent of weight function (1-z**2)
+        # weight_power = torch.Tensor([0.25])
         weight_power = torch.tensor(0.25)
 
         # define the normalising constant
@@ -588,15 +588,16 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
     # define weight function
     weight_term = torch.pow(1 - z**2, weight_power)
     if (chebyshev_term != chebyshev_term).any():
-        print("Z: ", z)
-        print("X: ", x)
+        print("Diagnostics for: Nans in Chebyshev. Code: {}".format(__name__))
+        print("Line number: 592")
+        print("Z values: (transformed to -1-ε, 1+ε)", z)
+        print("X values: ", x)
         print("Got Nan in Chebyshev; check bounds")
         breakpoint()
         raise ValueError(
             "Chebyshev returning NaNs. Ensure"
             + "it is being evaluated within boundaries."
         )
-
     return weight_term * chebyshev_term * normalising_constant
 
 
