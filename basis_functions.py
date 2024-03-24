@@ -9,7 +9,11 @@ import torch
 import torch.distributions as D
 
 # from framework import special, utils
-from ortho.polynomials import chebyshev_first, chebyshev_second
+from ortho.polynomials import (
+    chebyshev_first,
+    chebyshev_second,
+    generalised_laguerre,
+)
 from typing import Callable, Union, Tuple
 
 from ortho.special import hermite_function
@@ -518,6 +522,32 @@ def get_linear_coefficients_fasshauer(
     return (basis_intercept, basis_slope)
 
 
+def standard_laguerre_basis(x: torch.Tensor, deg: int, params: dict):
+    """
+    Returns a Laguerre basis function, using the Generalised Laguerre
+    polynomials, evaluated at x.
+
+    :  param x:      input tensor to evaluate the function at
+    :  param deg:    the degree of the basis function
+    :  param params: dictionary of kernel arguments. Should include
+                     an "alpha" parameter in order to get the generalised
+                     laguerre polynomial. This polynomial includes
+                     the standard laguerre polynomial as a special case when
+                     alpha = 0.
+    """
+    laguerre_term = generalised_laguerre(x, deg, params)
+    x_exponent = params["alpha"] / 2
+    weight_term = (x ** (x_exponent)) * torch.exp(-x / 2)
+    normalising_constant = torch.exp(
+        (
+            torch.lgamma(torch.tensor(deg + params["alpha"] + 1))
+            - torch.lgamma(torch.tensor(deg + 1))
+        )
+        / 2
+    )
+    return laguerre_term * weight_term / normalising_constant
+
+
 def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
     """
     Returns a standard Chebyshev basis function, using Chebyshev
@@ -652,12 +682,8 @@ def reshaping(tensors: torch.Tensor):
 
 if __name__ == "__main__":
     # pass
-    test_fasshauer_basis = True
     test_rff_basis = True
     test_rff_basis_multidim = False
-
-    if test_fasshauer_basis:
-        basis = Basis()
 
     if test_rff_basis:
         dim = 1
@@ -666,7 +692,7 @@ if __name__ == "__main__":
         spectral_distribution = D.Normal(torch.zeros(dim), torch.ones(dim))
         rff = RandomFourierFeatureBasis(dim, order, spectral_distribution)
         # x = torch.linspace(-1, 1, 100)
-        # x = torch.ones((order, dim))
+        # x = torch.ones((order, dim))https://www.youtube.com/watch?v=T72TopWbXJg
         x = torch.linspace(-3, 3, point_count)
 
         data = rff(x)
