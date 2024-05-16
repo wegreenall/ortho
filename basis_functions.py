@@ -180,6 +180,41 @@ class CompositeBasis(Basis):
         return self.order
 
 
+class SmoothExponentialBasis(Basis):
+    def __init__(
+        self,
+        dimension: int,
+        order: int,
+        params: dict,
+    ):
+        """
+        The smooth exponential basis functions as constructed in Fasshauer (2012),
+        "first" paramaterisation:
+            a, b, c.
+
+        The Hermite function here is that constructed with the Physicist's Hermite
+        Polynomial as opposed to the Probabilist's.
+
+        : param dimension: the dimension of the input space
+        : param order: the degree of the basis functions
+        : param params: dictionary of parameters.
+                        Required keys:
+                            - precision_parameter
+                            - ard_parameter
+        : param weight_function: a Callable function, w/ signature:
+                    weight_function(x: torch.Tensor,
+                                   deg: int,
+                                   parameters: dict) -> torch.Tensor
+                    which will be applied to the basis functions.
+        """
+        super().__init__(
+            basis_functions=smooth_exponential_basis_fasshauer,
+            dimension=dimension,
+            order=order,
+            parameters=params,
+        )
+
+
 class RandomFourierFeatureBasis(Basis):
     def __init__(
         self,
@@ -598,7 +633,7 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
         weight_power = torch.tensor(-0.25)
 
         # define the normalising constant
-        spacing_term = torch.sqrt((upper_boundary - lower_boundary) / 2)
+        spacing_term = math.sqrt((upper_boundary - lower_boundary) / 2)
         if deg == 0:
             normalising_constant = math.sqrt(1 / math.pi) / spacing_term
         else:

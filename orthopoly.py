@@ -12,6 +12,19 @@ for getting the measure/weight function.
 """
 
 
+class MultivariateOrthogonalPolynomial:
+    def __init__(
+        self, order: int, betas: torch.Tensor, gammas: torch.Tensor, leading=1
+    ):
+        """
+        A class representing a multivariate orthogonal polynomial
+        """
+        self.order = order
+
+        def __call__(x: torch.Tensor, deg: int, params: dict) -> torch.Tensor:
+            return
+
+
 class OrthogonalPolynomial:
     def __init__(
         self, order: int, betas: torch.Tensor, gammas: torch.Tensor, leading=1
