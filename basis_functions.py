@@ -290,10 +290,7 @@ class OrthonormalBasis(Basis):
         # ), "the basis function should be of type OrthogonalPolynomial"
 
         super().__init__(basis_functions, dimension, order, params)
-        if (
-            isinstance(weight_functions, tuple)
-            and len(weight_functions) != dimension
-        ):
+        if isinstance(weight_functions, tuple) and len(weight_functions) != dimension:
             raise ValueError(
                 "The number of basis functions passed in must match the dimension parameter"
             )
@@ -478,9 +475,7 @@ def smooth_exponential_basis_fasshauer(
         )
 
     if dim is not None and isinstance(dim, int):
-        a = torch.diag(params["precision_parameter"])[
-            dim
-        ]  # precision parameter
+        a = torch.diag(params["precision_parameter"])[dim]  # precision parameter
         b = torch.diag(params["ard_parameter"])[dim]  # ε  - of dimension d
     else:
         a = torch.diag(params["precision_parameter"])  # precision parameter
@@ -623,9 +618,7 @@ def standard_chebyshev_basis(x: torch.Tensor, deg: int, params: dict):
     }, 'chebyshev should be either "first" or "second"'
 
     # Transform to [-1,1] for processing
-    z = (2 * x - (upper_boundary + lower_boundary)) / (
-        upper_boundary - lower_boundary
-    )
+    z = (2 * x - (upper_boundary + lower_boundary)) / (upper_boundary - lower_boundary)
 
     if chebyshev == "first":
         chebyshev_term = chebyshev_first(z, deg)
@@ -705,11 +698,7 @@ def reshaping(tensors: torch.Tensor):
         einsum_string += "n" + chr(ord("a") + i) + ","
         used_chars += chr(ord("a") + i)
     einsum_string += (
-        "n"
-        + chr(ord("a") + i + 1)
-        + "-> n"
-        + used_chars
-        + chr(ord("a") + i + 1)
+        "n" + chr(ord("a") + i + 1) + "-> n" + used_chars + chr(ord("a") + i + 1)
     )
     result = torch.einsum(einsum_string, *tensors)
     return result
