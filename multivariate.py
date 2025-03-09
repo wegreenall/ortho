@@ -89,7 +89,7 @@ class MultivariateMonomialSequence:
         self.monomials = [
             MultivariateMonomial(n, d) for n in range(N + 1)
         ]  # an iterator of the monomials
-        print(self.monomials)
+        # print(self.monomials)
 
     def __call__(self,n: int, x: torch.Tensor):
         result = torch.zeros(x.shape[0], int(MultivariateStieltjes.R(n, self.d)))
@@ -117,7 +117,7 @@ def moment_matrix(
     """
     value = multivariate_monomial_sequence(sample)
     moment_matrix_value = value.t() @ value / sample.shape[0]
-    print(moment_matrix_value.shape)
+    # print(moment_matrix_value.shape)
     # plt.imshow(moment_matrix_value.numpy(), cmap="viridis")
     # plt.show()
 
@@ -163,18 +163,30 @@ class MultivariateStieltjes:
         """
         The main function to calculate the A and B matrices.
         """
-        for n in range(self.n):
-            print(f"Calculating A and B for n={n}")
-            A_n = torch.zeros(self.r(n, self.d), self.r(n, self.d), self.d)
-            B_n = torch.zeros(self.r(n+1, self.d), self.r(n, self.d), self.d)
-            for i in range(self.d):
-                A_n = self.A(n, self.d)
-                B_n = self.B(n, self.d)
-                print(colored("A_n", "red"), A_n)
-                print(colored("B_n", "blue"), B_n)
+        self.As = []
+        self.Bs = []
 
+        # first, get the zero-th
+        self.As.append(torch.zeros(self.r(0, self.d), self.r(0, self.d), self.d))
+        self.Bs.append(torch.zeros(self.r(0, self.d), self.r(1, self.d), self.d))
+        for i in range(0, self.n):
+            n = i+1
+            print(f"Calculating A and B for n={n}")
+            A_n = self.A(n, self.d)
+            print("A shape:", A_n.shape, "n:", n)
+            print("should be:", (self.r(n-1, self.d), self.r(n-1, self.d), self.d))
+            assert A_n.shape == (self.r(n-1, self.d), self.r(n-1, self.d), self.d)
             self.As.append(A_n)
+
+            B_n = self.B(n, self.d)
+            print("B shape:", B_n.shape, "n:", n)
+            print("should be:", (self.r(n-1, self.d), self.r(n, self.d), self.d))
+            assert B_n.shape == (self.r(n-1, self.d), self.r(n, self.d), self.d)
+
+            print(colored("A_n", "red"), A_n[-1])
+            print(colored("B_n", "blue"), B_n[-1])
             self.Bs.append(B_n)
+
 
     def ops(self, n: int, inputs: torch.Tensor):
         """
@@ -197,10 +209,11 @@ class MultivariateStieltjes:
             # r = r_{n-1}
             # d = d (dimensions)
             # n = n (sample_size)
-            term_1 = torch.einsum("nd, Rrd, nr -> nR", inputs,  B_n,  p_0)
-            term_2 = torch.einsum("Rrd, rrd, nr -> nR",  B_n,  A_n,  p_0)
+            term_1 = torch.einsum("nd, rRd, nr -> nR", inputs,  B_n,  p_0)
+            term_2 = torch.einsum("rRd, rrd, nr -> nR",  B_n,  A_n,  p_0)
             # term_3 = B @ self.ops(-1, inputs)
             result = term_1 + term_2
+            # breakpoint()
 
         elif n > 1:
             # einsum index key:
@@ -217,21 +230,35 @@ class MultivariateStieltjes:
 
             print("getting term_1")
             # breakpoint()
-            term_1 = torch.einsum("nd, Rrd, nr -> nR", inputs,  B_n,  p_n_1)
+            term_1 = torch.einsum("nd, rRd, nr -> nR", inputs,  B_n,  p_n_1)
             print("getting term_2")
-            term_2 = torch.einsum("Rrd, rrd, nr -> nR",  B_n,  A_n,  p_n_1)
+            term_2 = torch.einsum("rRd, rrd, nr -> nR",  B_n,  A_n,  p_n_1)
             print("getting term_3")
-            term_3 = torch.einsum("Rrd, rpd, np -> nR",  B_n,  B_n_1,  p_n_2)
+            term_3 = torch.einsum("rRd, prd, np -> nR",  B_n,  B_n_1,  p_n_2)
             
             result = term_1 + term_2 + term_3
 
         # get the inverse eigenvalue matrix:
-        L = torch.einsum("Rrd, Prd -> RP", B_n, B_n)
-        # breakpoint()
-        # breakpoint()
+        L = torch.einsum("rRd, rPd -> RP", B_n, B_n)
         L_inv = torch.inverse(L)
-        assert result.shape == (inputs.shape[0], self.r(n, self.d))
+        assert result.shape == (inputs.shape[0], self.r(n, self.d)), f"ops shape is incorrect, should be: {(inputs.shape[0], self.r(n, self.d))}"
+        print("ops shape is correct for n-1 = ", n)
         return result @ L_inv
+
+    def ops_tilde(self, n: int, inputs: torch.Tensor):
+        """
+        In order to calculate the A, B matrices, we need to use p_tilde, which
+        is constructed as:
+                p_tilde = x_i p_n - A_{n+1} p_n - B'_{n, i} p_{n-1}
+        """
+        # breakpoint()
+        A_n_plus_1 = self.As[n]
+        B_n = self.Bs[n-1]
+        term_1 = torch.einsum("nd, nr -> nrd", inputs, self.ops(n-1, inputs))
+        term_2 = - torch.einsum("rrd, nr -> nrd", A_n_plus_1, self.ops(n-1, inputs))
+        term_3 = - torch.einsum("rRd, nr -> nRd", B_n, self.ops(n-2, inputs))
+        # breakpoint()
+        return term_1 + term_2 + term_3
 
     @staticmethod
     def r(n: int, d: int) -> int:
@@ -277,22 +304,35 @@ class MultivariateStieltjes:
         )
 
 
-    def S(self, n: int, d: int):
+    def S(self, i: int, d: int):
         """
         Returns the moment matrix S_n,i for the given sample, where:
                      S_n,i = \int x_i p_n p_n^t dμ(x)
         """
-        output = torch.zeros(self.r(n, d), self.r(n, d))
-        polynomial_evaluation = self.ops(n, self.sample)
+        polynomial_evaluation = self.ops(i, self.sample)
+        # if i==0:
+            # if n == 0, we're looking for A_1
+            # breakpoint()
+        if i == 1:
+            breakpoint()
         result = torch.einsum("nd, ni, nj -> ijd", self.sample, polynomial_evaluation, polynomial_evaluation)/self.sample.shape[0]
+        print("result shape in A():", result.shape)
+        assert result.shape == (self.r(i, d), self.r(i, d), d), f"S_{i} shape is incorrect, should be {(self.r(i, d), self.r(i, d), d)}"
         return result
 
-    def T(self, n: int, i: int, j: int, d: int):
+    def T(self, n: int, d: int):
         """
         Returns the moment matrix T_n,i,j for the given sample, where:
-                     T_n,i,j = \int x_i x_j p_n p_n^t dμ(x)
+                     T_n,i,j = \int x_i \tilde{p}_{n+1} \tilde{p}_{n+1}^t dμ(x)
         """
-        pass
+        polynomial_evaluation = self.ops_tilde(n, self.sample)
+        print("Just got polynomial_evaluation")
+        # breakpoint()
+        result = torch.einsum("nrd, nRD -> rRdD", polynomial_evaluation, polynomial_evaluation)/self.sample.shape[0]
+        # breakpoint()
+        print(result.shape)
+        assert result.shape == (self.r(n-1, d), self.r(n-1, d), d, d), f"T_{{n, i, j}} shape is incorrect, should be {(self.r(n, d), self.r(n, d), d)}"
+        return result
 
 
     def A(self, n: int, d: int):
@@ -302,16 +342,18 @@ class MultivariateStieltjes:
         Necessary for this calculation is P_{n-1}.
         """
         # polynomial_evaluation = self.ops(n-1, self.sample)
-        return self.S(n-1, d)
+        result = self.S(n-1, d)
+        return result
 
     def B(self, n: int, d: int):
         """
         Calculates the matrix B_n,i in the recurrence.
         """
 
-        if n == -1:  # "fall back" to the constant polynomial
+        if n == 0:  # "fall back" to the constant polynomial
             result = torch.zeros(self.r(n, d), self.r(n+1, d), d)
-        elif n == 0:  # "fall back" to the moment matrices
+        elif n == 1:  # "fall back" to the moment matrices
+            i = 0
             """
             See section 5.2.5 of the paper.
 
@@ -325,33 +367,33 @@ class MultivariateStieltjes:
             """
             MOMENT MATRIX IS NOT DOING WHAT YOU THINK IT IS DOING
             """
-            Gn = self.G(n, d)
-            Gn_plus_1 = self.G(n+1, d)
+            Gn = self.G(i, d)
+            Gn_plus_1 = self.G(i+1, d)
             # breakpoint()
 
             Ln = torch.linalg.cholesky(Gn)
             Ln_inv = torch.inverse(Ln)
             # breakpoint()
-            Ln_tilde = Ln_inv[-self.r(n, d):, :]
-            assert Ln_tilde.shape == (self.r(n, d), self.R(n, d))
-            print("just made Ln_tilde")
+            Ln_tilde = Ln_inv[-self.r(i, d):, :]
+            assert Ln_tilde.shape == (self.r(i, d), self.R(i, d))
+            # print("just made Ln_tilde")
 
             Ln_plus_1 = torch.linalg.cholesky(Gn_plus_1)
             Ln_plus_1_inv = torch.inverse(Ln_plus_1)
-            Ln_plus_1_tilde = Ln_plus_1_inv[-self.r(n+1, d):, :]
-            assert Ln_plus_1_tilde.shape == (self.r(n+1, d), self.R(n+1, d))
-            print("just made Ln_plus_1_tilde")
+            Ln_plus_1_tilde = Ln_plus_1_inv[-self.r(n, d):, :]
+            assert Ln_plus_1_tilde.shape == (self.r(n, d), self.R(n, d))
+            # print("just made Ln_plus_1_tilde")
             
             # Gni = int x_i p_0 p_0^t dμ(x)
-            Gni_plus_1 = torch.einsum("nd, ni, nj -> ijd", self.sample, self.monomial_sequence(n+1, self.sample), self.monomial_sequence(n+1, self.sample))/self.sample.shape[0]
-            assert Gni_plus_1.shape == (self.R(n+1, d), self.R(n+1, d), self.d)
-            print("just made Gni_plus_1")
+            Gni_plus_1 = torch.einsum("nd, ni, nj -> ijd", self.sample, self.monomial_sequence(n, self.sample), self.monomial_sequence(n, self.sample))/self.sample.shape[0]
+            assert Gni_plus_1.shape == (self.R(n, d), self.R(n, d), self.d)
+            # print("just made Gni_plus_1")
 
-            Gni_plus_one_tilde = Gni_plus_1[:self.R(n, d), :]
-            assert Gni_plus_one_tilde.shape == (self.R(n, d), self.R(n+1, d), self.d)
-            print("just made Gni_plus_1_tilde")
+            Gni_plus_one_tilde = Gni_plus_1[:self.R(i, d), :]
+            assert Gni_plus_one_tilde.shape == (self.R(i, d), self.R(n, d), self.d)
+            # print("just made Gni_plus_1_tilde")
 
-            print("About to make B_n_plus_1")
+            # print("About to make B_n_plus_1")
             # key:
             # r = r_n
             # p = r_n+1
@@ -360,42 +402,85 @@ class MultivariateStieltjes:
             # d = dimension
             B_n_plus_1 = torch.einsum("rR, RPd, pP -> rpd", Ln_tilde, Gni_plus_one_tilde, Ln_plus_1_tilde)
 
-            print("just made B_n_plus_1")
+            # print("just made B_n_plus_1")
             # breakpoint()
             # B_n_plus_1 = Ln_inv @ Gni_plus_one_tilde @ Ln_plus_1_tilde.t()
 
             result = B_n_plus_1
 
-        elif n > 0 and d > 2:
+        elif n > 1:
             """
             See section 5.2.6 of the paper.
             """
-            # Gn = moment_matrix(n, d, self.sample, self.monomial_sequence)
-            # Gn_plus_1 = moment_matrix(n+1, d, self.sample, self.monomial_sequence)
+            T = self.T(n, d)
+            print("T shape:", T.shape)
+            # breakpoint() 
+            Ss = torch.zeros(self.r(n-1, d), self.r(n-1, d), d)
+            Us = torch.zeros(self.r(n-1, d), self.r(n-1, d), d)
+            V_hat = torch.zeros(self.r(n-1, d), self.r(n-1, d), d)
+            V_tilde = torch.zeros(self.r_delta(n, d), self.r(n-1, d), d)
+            for i in range(d):
+                for j in range(d): 
+                    if i == j:
+                        T_ii = T[:, :, i, i]
+                        U, S, V = torch.svd(T_ii)
+                        # take the square root of the Σ matrix
+                        S = torch.sqrt(torch.diag(S))
+                        # breakpoint()
+                        Ss[:, :, i] = S
+                        Us[:, :, i] = U
 
-            # Ln = torch.linalg.cholesky(Gn)
-            # Ln_inv = torch.inverse(Ln)
-            # Ln_tilde = Ln_inv[-self.r(n, d):, :]
-            # assert Ln_tilde.shape == (self.r(n, d), self.R(n, d))
-
-            # Ln_plus_1 = torch.linalg.cholesky(Gn_plus_1)
-            # Ln_plus_1_inv = torch.inverse(Ln_plus_1)
-            # Ln_plus_1_tilde = Ln_plus_1_inv[-self.r(n+1, d):, :]
-            # assert Ln_plus_1_tilde.shape == (self.r(n+1, d), self.R(n+1, d))
-
-            
-            # # Gni = int x_i p_0 p_0^t dμ(x)
-            # Gni_plus_1 = torch.einsum("nd, ni, nj -> ij", self.sample, self.ops(n+1, self.sample), self.ops(n+1, self.sample))/self.sample.shape[0]
-            # assert Gni_plus_1.shape == (self.R(n+1, d), self.R(n+1, d))
-
-            # G_n_plus_one_tilde = Gni_plus_1[:self.R(n, d), :]
-            # B_n_plus_1 = Ln_inv @ G_n_plus_one_tilde @ Ln_plus_1_tilde.t()
-            # result = B_n_plus_1
-        if d == 2:
+            # calculate the V_hat matrix
+            # breakpoint()
+            Ss = Ss.permute(2, 0, 1)
+            Ss_inv = torch.linalg.inv(Ss)
+            Ss_inv = Ss_inv.permute(1, 2, 0)
             """
-            See section 5.2.4 of the paper.
+            From the paper:
+                Using mixed moments  T_{n,i,j}  we can compute the square
+                matrices V_hat_{n+1} whicha re subblocks of V_{n+1},
+
+                (Recall from (22) that V_hat_{n+1},i = is already known for i = 1)
+
             """
-            pass
+            V_hat[:,:,0] = torch.eye(self.r(n-1, d))
+            V_hat[:,:,1:] = torch.einsum("ab, bc, cdD, deD, efD -> afD", Ss_inv[:,:,0], Us[:,:,0], T[:,:,0,1:], Us[:,:,1:], Ss_inv[:,:,1:])
+
+            # Calculate the V_tilde matrices - let's see
+            if d == 2:
+                """
+                See section 5.2.4 of the paper.
+
+                When d = 2, we need only compute V_tilde_{n+1,i} for i = 2. 
+                Since Δr_{n} = 1 for every n when d = 2.
+                
+                We fix:
+                    y := V^T_tilde_{n+1,2} \in R^{r_{n}}
+
+                Then, 
+                    yy' = I_{r_{n}} - V^T_hat_{n+1,2} V_hat_{n+1,2}
+
+                                z = chol(yy')^T
+
+                """
+                # yy = torch.eye(self.r(n-1, d)) - V_hat[:,:,1] @ V_hat[:,:,1].t()
+                yy = torch.eye(self.r(n-1, d)) - V_hat[:,:,1].t() @ V_hat[:,:,1]
+                z = torch.linalg.cholesky(yy)[0].t() 
+                # breakpoint()
+                # assert z.shape == torch.Size((1, self.r(n-1, d)))
+                V_tilde[:,:,1] = z
+                # breakpoint()
+            elif d > 2:
+                pass
+            Vs = torch.cat((V_hat, V_tilde))  
+            # breakpoint()
+            B_n_plus_1 = torch.einsum("abD, bcD, dcD -> adD", Us, Ss, Vs)
+            result = B_n_plus_1
+            # print(Ss)
+            # print(Us)
+            # print("Done Us and Ss")
+            # print("B_n_plus_1 shape:", B_n_plus_1.shape)
+
 
         # result = torch.eye(self.r(n, d)).repeat(d, 1, 1).permute(1, 2, 0)
         # result = torch.ones(self.r(n, d), self.r(n-1, d), d)
@@ -405,7 +490,7 @@ class MultivariateStieltjes:
         B_n = \in R^{dr_{n-1} x r_{n-1}}
         """
         # breakpoint()
-        assert result.shape == torch.Size((self.r(n, d), self.r(n+1, d), d)), f"Shape of B_n is {result.shape}, and it should be {(self.r(n, d), self.r(n+1, d), d)}"
+        assert result.shape == torch.Size((self.r(n-1, d), self.r(n, d), d)), f"Shape of B_n is {result.shape}, and it should be {(self.r(n-1, d), self.r(n, d), d)}"
         return result
 
     def U(self, n:int , i: int, d: int):
